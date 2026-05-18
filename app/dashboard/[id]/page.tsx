@@ -36,14 +36,21 @@ export default function DashboardPage({ params }: { params: { id: string } }) {
     { id: 'manhours', label: '8. 工数', icon: Clock, color: '#475569' },
   ];
 
-  // 🚀 【重要修正】新しいデータAPI（sb_publishable_...）の正規URL構造に完全適合化
+  // 🚀 【修正】Vercelの環境変数（NEXT_PUBLIC_...）から本物のURLと鍵を安全に読み込むロジックに統一
   const supabaseRequest = async (table: string, method: string, body?: any) => {
     try {
-      // 新しいデータAPIでは /v1/ の後に直接テーブル名を指定します
-      const url = `https://ukhcalayaazwmufewsks.supabase.co/rest/v1/${table}`;
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ukhcalayaazwmufewsks.supabase.co';
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseKey) {
+        console.error("Supabase API Key is missing in environment variables.");
+        return null;
+      }
+
+      const url = `${supabaseUrl}/rest/v1/${table}`;
       const headers: any = {
-        'apikey': 'sb_publishable_tFUeDqwtyM924ZEgXI94OQ_8g9sAV2q',
-        'Authorization': 'Bearer sb_publishable_tFUeDqwtyM924ZEgXI94OQ_8g9sAV2q',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
       };
