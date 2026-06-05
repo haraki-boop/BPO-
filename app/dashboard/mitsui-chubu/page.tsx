@@ -44,10 +44,10 @@ const AnimatedNumber = ({ value }: { value: number }) => {
 export default function UniversalDashboardPage() {
   // 🌟 変更点1：新しい現場に持っていくときは、ここの「拠点ID」を現場の識別名に変えてください
   // （Supabase側でピン留めや施策データを混ざらずに切り分けるために必須です）
-  const locationId = 'medi-entrance'; 
+  const locationId = 'mitsui-chubu'; 
   
   // 🌟 変更点2：新しい現場の「GASのウェブアプリURL」をここに貼り付けてください
-  const gasUrl = "https://script.google.com/macros/s/AKfycbwpBX4f5aDLO0sFW88ZpQ_tL78JJaNjy0H1Te3NDiKpexEu_ZWipRfBz0p04qvgOTvz/exec";
+  const gasUrl = "https://script.google.com/macros/s/AKfycbxH3S5J_wLCFM-0Hln-EKVT76yiFX5aT0aoH0wBRd1cPbI530GQhMVb2IHIh38dKziAaA/exec";
 
   const [isMounted, setIsMounted] = useState(false);
   const [data, setData] = useState<any>(null);
@@ -656,7 +656,7 @@ export default function UniversalDashboardPage() {
         </div>
         <div className="text-center w-full md:w-auto order-first md:order-none mb-1 md:mb-0">
           {/* 🌟 ヘッダータイトルも自動で「今開いている拠点名」に追従する仕様に連動させました */}
-          <h1 className="text-base md:text-lg font-black italic tracking-tighter uppercase text-slate-800">経営ダッシュボード : メディエントランス</h1>
+          <h1 className="text-base md:text-lg font-black italic tracking-tighter uppercase text-slate-800">経営ダッシュボード : 三井食品</h1>
           <p className="text-[8px] md:text-[9px] font-bold text-blue-600 tracking-[0.2em] uppercase mt-0.5">STRATEGIC MANAGEMENT LAYER</p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 md:gap-3 items-center w-full md:w-auto">
