@@ -199,10 +199,14 @@ export default function UniversalDashboardPage() {
           else setContractSelectedMonth(cleanCLabels[0] || '4');
         }
         
-        // 🌟 追加：月次確定データがあれば、一番新しい年月を初期セットする
+        // 🌟 修正：月次確定データの初期選択を「前月（最新から1つ手前）」にする
         if (json.salesConfirmedData) {
           const sKeys = Object.keys(json.salesConfirmedData).sort();
-          if (sKeys.length > 0) setSalesMonth(sKeys[sKeys.length - 1]);
+          if (sKeys.length > 1) {
+            setSalesMonth(sKeys[sKeys.length - 2]); // 最新の1つ手前（前月）をセット
+          } else if (sKeys.length > 0) {
+            setSalesMonth(sKeys[0]); // 1ヶ月分しかない場合はそれをセット
+          }
         }
       }
       if (isReload) showToast('最新データを取得しました', 'success');
