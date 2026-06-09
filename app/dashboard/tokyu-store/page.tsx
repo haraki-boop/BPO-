@@ -352,13 +352,16 @@ export default function UniversalDashboardPage() {
         else if (normalizedTitle.includes('前年')) entry.actual_lastYear = item.values;
         else entry.actual_thisMonth = item.values;
       }
-
       if (isYosan && (normalizedTitle.includes('今月') || !normalizedTitle.match(/先月|前年/))) {
-        entry.forecast = item.values;
-        if (normalizedTitle.includes('予算')) entry.forecastType = '予算';
-        else if (normalizedTitle.includes('目標')) entry.forecastType = '目標';
-        else entry.forecastType = '予測';
-      }
+  
+  // 💡 【ここを追加】すでに金庫に「予算」が入っていて、今来たのが「予測」なら上書きせずスルー！
+  if (entry.forecastType === '予算' && normalizedTitle.includes('予測')) return;
+
+  entry.forecast = item.values;
+  if (normalizedTitle.includes('予算')) entry.forecastType = '予算';
+  else if (normalizedTitle.includes('目標')) entry.forecastType = '目標';
+  else entry.forecastType = '予測';
+}
     });
 
     let result = Array.from(combinedMap.values());

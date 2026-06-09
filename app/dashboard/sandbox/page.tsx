@@ -354,11 +354,15 @@ export default function UniversalDashboardPage() {
       }
 
       if (isYosan && (normalizedTitle.includes('今月') || !normalizedTitle.match(/先月|前年/))) {
-        entry.forecast = item.values;
-        if (normalizedTitle.includes('予算')) entry.forecastType = '予算';
-        else if (normalizedTitle.includes('目標')) entry.forecastType = '目標';
-        else entry.forecastType = '予測';
-      }
+  
+  // 💡 【ここを追加】すでに金庫に「予算」が入っていて、今来たのが「予測」なら上書きせずスルー！
+  if (entry.forecastType === '予算' && normalizedTitle.includes('予測')) return;
+
+  entry.forecast = item.values;
+  if (normalizedTitle.includes('予算')) entry.forecastType = '予算';
+  else if (normalizedTitle.includes('目標')) entry.forecastType = '目標';
+  else entry.forecastType = '予測';
+}
     });
 
     let result = Array.from(combinedMap.values());
@@ -824,7 +828,6 @@ export default function UniversalDashboardPage() {
               return (
                 <div key={i} className={`print-avoid-break p-5 md:p-6 rounded-3xl shadow-sm flex flex-col gap-4 md:gap-5 min-w-0 overflow-hidden print:shadow-none print:border-slate-300 transition-all border relative ${m.is_hidden ? 'opacity-40 bg-slate-100 border-dashed border-amber-300' : 'bg-white border-slate-200'}`}>
                   
-                  {/* 📌 グラフ操作用コントロールスイッチを右上に配置（印刷時は非表示） */}
                   <div className="absolute top-4 right-4 flex gap-1.5 print:hidden z-20">
                     <button 
                       onClick={() => handleToggleMetricSetting(m.title, 'is_pinned', m.is_pinned)} 
@@ -941,7 +944,7 @@ export default function UniversalDashboardPage() {
                               </div>
                               <div className="flex justify-between items-baseline mt-2.5 border-t border-slate-700/50 pt-2.5">
                                 <span className="text-[10px] md:text-xs font-black text-blue-400 whitespace-nowrap">達成率</span>
-                                <span className={`text-xl md:text-2xl font-black whitespace-nowrap ${currentRatio >= 100 ? (isCost ? 'text-rose-400' : 'text-emerald-400') : (isCost ? 'text-emerald-400' : 'text-rose-400')}`}>{currentRatio.toFixed(1)}%</span>
+                                <span className={`text-xl font-black whitespace-nowrap ${currentRatio >= 100 ? (isCost ? 'text-rose-400' : 'text-emerald-400') : (isCost ? 'text-emerald-400' : 'text-rose-400')}`}>{currentRatio.toFixed(1)}%</span>
                               </div>
                             </>
                           )}
@@ -1267,45 +1270,58 @@ export default function UniversalDashboardPage() {
                 </div>
               </div>
             </div>
+            
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-3 print:grid-cols-8 print:gap-2">
-              {contractList.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 font-bold">データがありません。GAS側でデータを転写してください。</div>}
-              {contractList.map((m, i) => {
-                const targetIdx = m.labels.findIndex(lbl => String(lbl).replace('月', '') === String(contractSelectedMonth));
-                const actVal = targetIdx !== -1 ? n(m.actual[targetIdx]) : 0;
-                const fctVal = targetIdx !== -1 ? n(m.forecast[targetIdx]) : 0;
-                if (hideZeroContracts && actVal === 0 && fctVal === 0) return null;
-                const diffVal = actVal - fctVal;
-                const ratioVal = fctVal > 0 ? (actVal / fctVal) * 100 : 0;
-                return (
-                  <div key={i} className="bg-white border border-slate-200 p-2.5 rounded-xl shadow-sm flex flex-col justify-between gap-1.5 transition-all hover:shadow-md border-t-4 print:break-inside-avoid print:shadow-none print:border-slate-300" style={{ borderTopColor: '#3b82f6' }}>
-                    <div className="border-b border-slate-100 pb-1">
-                      <h4 className="text-[10px] md:text-xs font-black text-slate-800 tracking-tight leading-snug line-clamp-2 min-h-[2.5rem]" title={m.title}>{m.title}</h4>
-                    </div>
-                    <div className="space-y-1 mt-1">
-                      <div className="flex justify-between items-end">
-                        <span className="text-[8px] text-slate-400 font-bold whitespace-nowrap">実績</span>
-                        <span className="text-xs md:text-sm font-black text-slate-800 whitespace-nowrap">{formatVal(actVal, m.title)}</span>
+              {contractList.length === 0 ? (
+                <div className="col-span-full py-10 text-center text-slate-400 font-bold">データがありません。GAS側でデータを転写してください。</div>
+              ) : (
+                contractList.map((m, i) => {
+                  const targetIdx = m.labels.findIndex(lbl => String(lbl).replace('月', '') === String(contractSelectedMonth));
+                  const actVal = targetIdx !== -1 ? n(m.actual[targetIdx]) : 0;
+                  const fctVal = targetIdx !== -1 ? n(m.forecast[targetIdx]) : 0;
+                  
+                  // 🟢 前月実績の自動算出（4月度の場合は前月がないので0になります）
+                  const prevActVal = (targetIdx > 0) ? n(m.actual[targetIdx - 1]) : 0;
+
+                  if (hideZeroContracts && actVal === 0 && fctVal === 0) return null;
+                  const diffVal = actVal - fctVal;
+                  const ratioVal = fctVal > 0 ? (actVal / fctVal) * 100 : 0;
+                  return (
+                    <div key={i} className="bg-white border border-slate-200 p-2.5 rounded-xl shadow-sm flex flex-col justify-between gap-1.5 transition-all hover:shadow-md border-t-4 print:break-inside-avoid print:shadow-none print:border-slate-300" style={{ borderTopColor: '#3b82f6' }}>
+                      <div className="border-b border-slate-100 pb-1">
+                        <h4 className="text-[10px] md:text-xs font-black text-slate-800 tracking-tight leading-snug line-clamp-2 min-h-[2.5rem]" title={m.title}>{m.title}</h4>
                       </div>
-                      <div className="flex justify-between items-end">
-                        <span className="text-[8px] text-slate-400 font-bold whitespace-nowrap">予算</span>
-                        <span className="text-[9px] md:text-[10px] font-bold text-slate-500 whitespace-nowrap">{formatVal(fctVal, m.title)}</span>
+                      <div className="space-y-1 mt-1">
+                        <div className="flex justify-between items-end">
+                          <span className="text-[8px] text-slate-400 font-bold whitespace-nowrap">当月実績</span>
+                          <span className="text-xs md:text-sm font-black text-slate-800 whitespace-nowrap">{formatVal(actVal, m.title)}</span>
+                        </div>
+                        {/* 🟢 追加：前月実績の表示ライン */}
+                        <div className="flex justify-between items-end">
+                          <span className="text-[8px] text-slate-400 font-bold whitespace-nowrap">前月実績</span>
+                          <span className="text-[9px] md:text-[10px] font-bold text-slate-400 whitespace-nowrap">{formatVal(prevActVal, m.title)}</span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                          <span className="text-[8px] text-slate-400 font-bold whitespace-nowrap">当月予算</span>
+                          <span className="text-[9px] md:text-[10px] font-bold text-slate-500 whitespace-nowrap">{formatVal(fctVal, m.title)}</span>
+                        </div>
+                        <div className="flex justify-between items-end border-t border-dashed border-slate-200 pt-1">
+                          <span className="text-[8px] text-slate-400 font-bold whitespace-nowrap">予算差異</span>
+                          <span className={`text-[10px] md:text-xs font-black whitespace-nowrap ${diffVal > 0 ? 'text-emerald-600' : diffVal < 0 ? 'text-rose-600' : 'text-slate-500'}`}>{diffVal > 0 ? '+' : ''}{formatVal(diffVal, m.title)}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-end border-t border-dashed border-slate-200 pt-1">
-                        <span className="text-[8px] text-slate-400 font-bold whitespace-nowrap">差異</span>
-                        <span className={`text-[10px] md:text-xs font-black whitespace-nowrap ${diffVal > 0 ? 'text-emerald-600' : diffVal < 0 ? 'text-rose-600' : 'text-slate-500'}`}>{diffVal > 0 ? '+' : ''}{formatVal(diffVal, m.title)}</span>
+                      <div className="bg-slate-50 rounded-lg p-1.5 flex justify-between items-center border border-slate-100 mt-1 print:bg-white print:border-slate-200">
+                        <span className="text-[7px] text-slate-400 font-black whitespace-nowrap">達成率</span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded flex items-center whitespace-nowrap ${ratioVal >= 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{ratioVal > 0 ? `${ratioVal.toFixed(1)}%` : '--%'}</span>
                       </div>
                     </div>
-                    <div className="bg-slate-50 rounded-lg p-1.5 flex justify-between items-center border border-slate-100 mt-1 print:bg-white print:border-slate-200">
-                      <span className="text-[7px] text-slate-400 font-black whitespace-nowrap">達成率</span>
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded flex items-center whitespace-nowrap ${ratioVal >= 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{ratioVal > 0 ? `${ratioVal.toFixed(1)}%` : '--%'}</span>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         )}
-      </main>
+        </main>
 
       {/* 通知（Toast）ポップアップ */}
       {toastInfo.show && (
