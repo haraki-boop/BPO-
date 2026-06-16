@@ -829,7 +829,6 @@ export default function UniversalDashboardPage() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-20 notranslate print:bg-white print:pb-0 print:block" translate="no">
       <style dangerouslySetInnerHTML={{__html: `@media print { @page { size: A4 portrait; margin: 10mm; } body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } main { zoom: 0.65; } .print-avoid-break { page-break-inside: avoid; } }`}} />
@@ -1349,19 +1348,31 @@ export default function UniversalDashboardPage() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8 print:grid-cols-2">
                 {(() => {
                   const currentItems = activeActionTab === 'dx' ? filteredDxItems : filteredEnvItems;
+                  
+                  // 🌟開始日（start_date）の降順（新しい順）にソート処理を適用
+                  const sortedItems = [...currentItems].sort((a: any, b: any) => (b.start_date || '').localeCompare(a.start_date || ''));
+                  
                   const targetTable = activeActionTab === 'dx' ? 'dx_actions' : 'env_actions';
-                  const displayItems = showHiddenItems ? currentItems : currentItems.filter((item: any) => !item.is_hidden);
+                  const displayItems = showHiddenItems ? sortedItems : sortedItems.filter((item: any) => !item.is_hidden);
                   const themeColor = activeActionTab === 'dx' ? '#7c3aed' : '#10b981';
                   
                   if (displayItems.length === 0) return <div className="col-span-1 lg:col-span-2 bg-white border p-8 md:p-12 rounded-2xl md:rounded-[2.5rem] text-center text-slate-400 font-bold text-xs md:text-sm">💡 該当する施策アクションはありません。</div>;
                   return displayItems.map((item, index) => {
                     const itemRatio = Math.min(100, Math.max(0, Math.round(n(item.ratio))));
+                    
+                    // 🌟ソート順変更に伴うデータ誤操作を防ぐため、本当のインデックスを特定
+                    const realIdx = (activeActionTab === 'dx' ? dxItems : envItems).findIndex(x => x.id === item.id);
+
                     return (
                       <div key={index} className={`print-avoid-break bg-white border p-5 md:p-8 rounded-3xl shadow-sm flex flex-col md:flex-row gap-4 md:gap-6 items-center transition-all relative overflow-hidden print:shadow-none print:border-slate-300 ${item.is_hidden ? 'opacity-40 bg-slate-100 border-dashed' : item.customer_related === 'あり' ? 'border-rose-200 bg-rose-50/10' : 'border-slate-200'}`}>
                         <div className="absolute top-3 right-3 flex gap-1.5 print:hidden">
                           <button onClick={() => handleToggleHideItem(item, targetTable)} className={`w-7 h-7 flex items-center justify-center rounded-full border shadow-sm transition-all ${item.is_hidden ? 'bg-amber-100 border-amber-200 text-amber-600' : 'bg-white text-slate-400 hover:text-amber-500'}`} title={item.is_hidden ? "再表示する" : "隠す"}>{item.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}</button>
-                          <button onClick={() => handleOpenEditModal(index)} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-blue-500 transition-all"><Edit2 size={13} /></button>
-                          <button onClick={() => { if(confirm("削除しますか？")) handleDeleteItem(index); }} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-rose-500 transition-all"><X size={14} /></button>
+                          
+                          {/* 🌟引数を realIdx に変更 */}
+                          <button onClick={() => handleOpenEditModal(realIdx)} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-blue-500 transition-all"><Edit2 size={13} /></button>
+                          
+                          {/* 🌟引数を realIdx に変更 */}
+                          <button onClick={() => { if(confirm("削除しますか？")) handleDeleteItem(realIdx); }} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-rose-500 transition-all"><X size={14} /></button>
                         </div>
                         <div className="w-[120px] h-[120px] md:w-[140px] md:h-[140px] relative shrink-0 min-w-0 mt-6 md:mt-0 print:w-[140px] print:h-[140px]">
                           <ResponsiveContainer width="100%" height="100%">
@@ -1405,17 +1416,18 @@ export default function UniversalDashboardPage() {
                     if (displayHistory.length === 0) return <div className="col-span-1 lg:col-span-2 text-slate-400 text-[11px] md:text-sm font-bold pl-2 py-4">💡 該当する商談営業履歴ログはありません。</div>;
                     
                     return displayHistory.map((log, index) => {
-                      // 🌟ここが本物の修正：元の配列から本当のID（realIdx）を探し出す
+                      // 🌟インデックスズレを防ぐため、本当のインデックス（realIdx）を特定
                       const realIdx = historyItems.findIndex(x => x.id === log.id);
-
                       return (
                         <div key={index} className={`print-avoid-break bg-slate-50 border p-4 md:p-6 rounded-2xl md:rounded-3xl space-y-3 relative group transition-all print:bg-white print:border-slate-300 ${log.is_hidden ? 'opacity-40 bg-slate-200 border-dashed shadow-none' : 'border-slate-100 hover:shadow-md'}`}>
                           <div className="absolute top-3 right-3 flex gap-1.5 print:hidden">
                             <button onClick={() => handleToggleHideItem(log, 'sales_history')} className={`w-7 h-7 flex items-center justify-center rounded-full border shadow-sm transition-all ${log.is_hidden ? 'bg-amber-100 border-amber-200 text-amber-600' : 'bg-white text-slate-400 hover:text-amber-500'}`} title={log.is_hidden ? "再表示する" : "隠す"}>
                               {log.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
                             </button>
+                            
                             {/* 🌟引数を realIdx に変更 */}
                             <button onClick={() => handleOpenEditModal(realIdx)} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-blue-500 transition-all"><Edit2 size={13} /></button>
+                            
                             {/* 🌟引数を realIdx に変更 */}
                             <button onClick={() => { if(confirm("消去しますか？")) handleDeleteItem(realIdx); }} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-rose-500 transition-all"><X size={14} /></button>
                           </div>
