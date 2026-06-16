@@ -61,7 +61,7 @@ export default function UniversalDashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [data, setData] = useState<any>(null);
 
-  // タブ管理・表示モード管理
+ // タブ管理・表示モード管理
   const [activeTab, setActiveTab] = useState('sales');
   const [activeMonthlyTab, setActiveMonthlyTab] = useState<'salesConfirmed' | 'productivity'>('salesConfirmed');
   const [activeActionTab, setActiveActionTab] = useState<'dx' | 'env' | 'history'>('dx');
@@ -384,7 +384,6 @@ export default function UniversalDashboardPage() {
 
     if (searchQuery) result = result.filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    // 🌟スタッフ工数の合算ロジック
     if (activeTab === 'labor') {
       const staffSetting = metricSettings.find(s => s.tab_id === activeTab && s.metric_title === 'スタッフ工数 (通常・残業・深夜)');
       const stackedGroups: any = {
@@ -513,15 +512,12 @@ export default function UniversalDashboardPage() {
     });
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
-  // =========================================================
-  // ⚙️ 【汎用化改修】物量・工数・生産性の3つの金庫データを解析するロジック
-  // =========================================================
+  // 🌟【100%動いていた元の金庫データ解析ロジック（volumeAccumulatedData等）を完全に死守】
   const computedVaultProductivity = useMemo(() => {
     if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0 } };
     
     const targetMonthStr = `/${prodSelectedMonth.padStart(2, '0')}/`;
     
-    // 💡 1. GASから届いた新しい「物量金庫」をフラット化
     const vRows: any[] = [];
     if (data.volumeAccumulatedData) {
       data.volumeAccumulatedData.forEach((item: any) => {
@@ -534,7 +530,6 @@ export default function UniversalDashboardPage() {
       });
     }
 
-    // 💡 2. GASから届いた新しい「工数金庫」をフラット化（日次・センター全体の合算用）
     const hTotalRows: any[] = [];
     if (data.manhoursAccumulatedData) {
       data.manhoursAccumulatedData.forEach((item: any) => {
@@ -551,7 +546,6 @@ export default function UniversalDashboardPage() {
       });
     }
 
-    // 💡 3. GASから届いた「生産性金庫」をフラット化
     const pRows: any[] = [];
     if (data.productivityAccumulatedData) {
       data.productivityAccumulatedData.forEach((item: any) => {
@@ -564,31 +558,26 @@ export default function UniversalDashboardPage() {
       });
     }
     
-    // 💡 4. 日付のユニークリストを作成し、タイムラインで並び替え
     const allDates = Array.from(new Set([
       ...vRows.map((r: any) => r.date),
       ...hTotalRows.map((r: any) => r.date),
       ...pRows.map((r: any) => r.date)
     ])).sort();
     
-    // 🌟 【汎用化】GASの設定からターゲットカテゴリを取得（なければ昭和冷蔵デフォルト）
     const processNames = data.masterSettings?.TARGET_CATEGORIES || ["リコス", "リコスアイス", "BB", "ユニー一括", "汎用"];
     
     let centerTotalVolume = 0;
     let centerTotalHours = 0;
     
-    // 💡 5. 【カテゴリ計算】物量合計と平均生産性の計算
     const items = processNames.map((proc: string) => {
       let procTotalVolume = 0;
       let prodSum = 0;
       let prodCount = 0;
       
-      // 🌟 【汎用化】GASの設定から名前変換マッピングを取得
       let prodName = proc;
       if (data.masterSettings?.NAME_MAPPING && data.masterSettings.NAME_MAPPING[proc]) {
         prodName = data.masterSettings.NAME_MAPPING[proc];
       } else {
-        // 万が一設定が空だった場合の昭和冷蔵用セーフティネット
         if (proc === "ユニー一括") prodName = "ユニー";
         if (proc === "BB") prodName = "ブロンコビリー";
       }
@@ -597,7 +586,6 @@ export default function UniversalDashboardPage() {
         const vMob = vRows.find((r: any) => r.date === dt && r.item === proc);
         const vol = vMob ? vMob.value : 0;
         
-        // 💡 生産性を探すときは、変換した prodName を使う
         const pMob = pRows.find((r: any) => r.date === dt && r.item === prodName);
         const prod = pMob ? pMob.value : 0;
         
@@ -611,14 +599,11 @@ export default function UniversalDashboardPage() {
       });
       
       const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
-      
-      // センター全体用に「対象カテゴリ」の物量だけを加算
       centerTotalVolume += procTotalVolume;
 
       return { process: proc, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
     });
     
-    // 💡 6. 【センター全体計算】総物量と総工数から生産性を割り算で算出
     centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
     
     const centerDailyList = allDates.map(dt => {
@@ -642,7 +627,6 @@ export default function UniversalDashboardPage() {
     return { items, summary: { totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd } };
   }, [data, prodSelectedMonth]);
 
-  // 💡 【重要】contractListやその他の変数を確実に復元！
   const contractList = (() => {
     if (!data || !data.contractYojitsuData) return [];
     const cMap = new Map();
@@ -845,6 +829,7 @@ export default function UniversalDashboardPage() {
       </div>
     );
   }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-20 notranslate print:bg-white print:pb-0 print:block" translate="no">
       <style dangerouslySetInnerHTML={{__html: `@media print { @page { size: A4 portrait; margin: 10mm; } body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } main { zoom: 0.65; } .print-avoid-break { page-break-inside: avoid; } }`}} />
@@ -895,7 +880,6 @@ export default function UniversalDashboardPage() {
               <input type="text" placeholder="項目を絞り込み検索..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-700 pl-10 pr-4 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
             </div>
             
-            {/* 🌟 1〜5のタブでは月切り替えフィルターを非表示にし、事故管理などに限定 */}
             {['accidents'].includes(activeTab) && (
               <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-100 px-3 py-2.5 rounded-xl shadow-sm shrink-0">
                 <Calendar size={14} className="text-blue-500" />
@@ -1419,25 +1403,33 @@ export default function UniversalDashboardPage() {
                     });
                     const displayHistory = showHiddenItems ? sortedHistoryItems : sortedHistoryItems.filter((log: any) => !log.is_hidden);
                     if (displayHistory.length === 0) return <div className="col-span-1 lg:col-span-2 text-slate-400 text-[11px] md:text-sm font-bold pl-2 py-4">💡 該当する商談営業履歴ログはありません。</div>;
-                    return displayHistory.map((log, index) => (
-                      <div key={index} className={`print-avoid-break bg-slate-50 border p-4 md:p-6 rounded-2xl md:rounded-3xl space-y-3 relative group transition-all print:bg-white print:border-slate-300 ${log.is_hidden ? 'opacity-40 bg-slate-200 border-dashed shadow-none' : 'border-slate-100 hover:shadow-md'}`}>
-                        <div className="absolute top-3 right-3 flex gap-1.5 print:hidden">
-                          <button onClick={() => handleToggleHideItem(log, 'sales_history')} className={`w-7 h-7 flex items-center justify-center rounded-full border shadow-sm transition-all ${log.is_hidden ? 'bg-amber-100 border-amber-200 text-amber-600' : 'bg-white text-slate-400 hover:text-amber-500'}`} title={log.is_hidden ? "再表示する" : "隠す"}>
-                            {log.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
-                          </button>
-                          <button onClick={() => handleOpenEditModal(index)} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-blue-500 transition-all"><Edit2 size={13} /></button>
-                          <button onClick={() => { if(confirm("消去しますか？")) handleDeleteItem(index); }} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-rose-500 transition-all"><X size={14} /></button>
+                    
+                    return displayHistory.map((log, index) => {
+                      // 🌟ここが本物の修正：元の配列から本当のID（realIdx）を探し出す
+                      const realIdx = historyItems.findIndex(x => x.id === log.id);
+
+                      return (
+                        <div key={index} className={`print-avoid-break bg-slate-50 border p-4 md:p-6 rounded-2xl md:rounded-3xl space-y-3 relative group transition-all print:bg-white print:border-slate-300 ${log.is_hidden ? 'opacity-40 bg-slate-200 border-dashed shadow-none' : 'border-slate-100 hover:shadow-md'}`}>
+                          <div className="absolute top-3 right-3 flex gap-1.5 print:hidden">
+                            <button onClick={() => handleToggleHideItem(log, 'sales_history')} className={`w-7 h-7 flex items-center justify-center rounded-full border shadow-sm transition-all ${log.is_hidden ? 'bg-amber-100 border-amber-200 text-amber-600' : 'bg-white text-slate-400 hover:text-amber-500'}`} title={log.is_hidden ? "再表示する" : "隠す"}>
+                              {log.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
+                            </button>
+                            {/* 🌟引数を realIdx に変更 */}
+                            <button onClick={() => handleOpenEditModal(realIdx)} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-blue-500 transition-all"><Edit2 size={13} /></button>
+                            {/* 🌟引数を realIdx に変更 */}
+                            <button onClick={() => { if(confirm("消去しますか？")) handleDeleteItem(realIdx); }} className="w-7 h-7 flex items-center justify-center rounded-full bg-white border text-slate-400 shadow-sm hover:text-rose-500 transition-all"><X size={14} /></button>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 md:gap-3 pr-24 print:pr-0">
+                            <div className="bg-white border-2 border-rose-500 p-1 md:p-1.5 rounded-full text-rose-500 shrink-0"><Building2 size={10} /></div>
+                            <span className="text-[10px] md:text-xs bg-slate-900 text-white px-2 md:px-2.5 py-0.5 rounded-lg font-mono font-black print:bg-slate-100 print:text-slate-800 print:border">{log.date || '日付未設定'}</span>
+                            <h4 className="text-sm md:text-base font-black text-slate-900 tracking-tight">{log.client}</h4>
+                            <span className={`text-[9px] md:text-[11px] font-black px-2 md:px-3 py-0.5 rounded-full border ${log.result === '●' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>結果: {log.result}</span>
+                          </div>
+                          {log.proposal && <div className="text-[10px] md:text-xs font-black text-slate-800 bg-white border px-2.5 md:px-3 py-1.5 rounded-xl w-fit"><span className="text-rose-500 font-extrabold">💡 提案内容:</span> {log.proposal}</div>}
+                          {log.detail && <p className="text-[11px] md:text-[12px] font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">{log.detail}</p>}
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 md:gap-3 pr-24 print:pr-0">
-                          <div className="bg-white border-2 border-rose-500 p-1 md:p-1.5 rounded-full text-rose-500 shrink-0"><Building2 size={10} /></div>
-                          <span className="text-[10px] md:text-xs bg-slate-900 text-white px-2 md:px-2.5 py-0.5 rounded-lg font-mono font-black print:bg-slate-100 print:text-slate-800 print:border">{log.date || '日付未設定'}</span>
-                          <h4 className="text-sm md:text-base font-black text-slate-900 tracking-tight">{log.client}</h4>
-                          <span className={`text-[9px] md:text-[11px] font-black px-2 md:px-3 py-0.5 rounded-full border ${log.result === '●' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>結果: {log.result}</span>
-                        </div>
-                        {log.proposal && <div className="text-[10px] md:text-xs font-black text-slate-800 bg-white border px-2.5 md:px-3 py-1.5 rounded-xl w-fit"><span className="text-rose-500 font-extrabold">💡 提案内容:</span> {log.proposal}</div>}
-                        {log.detail && <p className="text-[11px] md:text-[12px] font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">{log.detail}</p>}
-                      </div>
-                    ));
+                      );
+                    });
                   })()}
                 </div>
               </div>

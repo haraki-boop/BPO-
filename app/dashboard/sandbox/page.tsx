@@ -54,8 +54,8 @@ export default function UniversalDashboardPage() {
   // =========================================================
   // 🏢 【拠点マスター設定】
   // =========================================================
-  const LOCATION_ID = 'showa-reizo'; 
-  const LOCATION_NAME = '昭和冷蔵'; 
+  const LOCATION_ID = 'afs-minamikanto'; 
+  const LOCATION_NAME = 'afs南関東'; 
   
   const GAS_URL = `/api/gas?location=${LOCATION_ID}`;
   const [isMounted, setIsMounted] = useState(false);
