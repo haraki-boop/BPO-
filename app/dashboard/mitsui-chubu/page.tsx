@@ -54,8 +54,8 @@ export default function UniversalDashboardPage() {
   // =========================================================
   // 🏢 【拠点マスター設定】
   // =========================================================
-  const LOCATION_ID = 'afs-bisai'; 
-  const LOCATION_NAME = 'afs尾西流通'; 
+  const LOCATION_ID = 'mitsui-chubu'; 
+  const LOCATION_NAME = '三井食品'; 
   
   const GAS_URL = `/api/gas?location=${LOCATION_ID}`;
   const [isMounted, setIsMounted] = useState(false);
