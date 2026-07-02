@@ -231,26 +231,32 @@ export default function CompareDashboardPage() {
       try {
         const res = await fetch(GAS_API_URL);
         const data = await res.json();
-        if (!Array.isArray(data)) { setLoading(false); return; }
         
-        const formattedData = data.map((item: any) => {
-          const rawDateKey = item["日付"] || item["年月"] || "";
-          return { ...item, "日付": formatMonth(rawDateKey) };
-        });
+        // 💡 配列チェックの強制終了を撤廃し、GASからのJSONを直接受け取る
+        let perfData = [];
+        let accData = [];
+
+        if (Array.isArray(data)) {
+          perfData = data;
+        } else {
+          perfData = data.performance || [];
+          accData = data.accidents || [];
+        }
+
+        // 業績データのフォーマット（日付の調整 ＋ 「事故」データの強制ブロックバリア）
+        const formattedData = perfData
+          .filter((item: any) => {
+            const siteName = String(item["現場名"] || item.site || "");
+            return !siteName.includes("事故"); // 💡 ここで「事故_昭和冷蔵」などを絶対に弾く
+          })
+          .map((item: any) => {
+            const rawDateKey = item["日付"] || item["年月"] || "";
+            return { ...item, "日付": formatMonth(rawDateKey) };
+          });
 
         setRawData(formattedData);
+        setAccSheetLogs(accData);
 
-        if (data.length > 0 && data[0].accident_logs) {
-          setAccSheetLogs(data[0].accident_logs);
-        } else {
-          setAccSheetLogs([
-            { site: "昭和冷蔵", date: "2026-04-15", count: 1, type: "誤配" },
-            { site: "昭和冷蔵", date: "2026-04-26", count: 1, type: "誤配" },
-            { site: "昭和冷蔵", date: "2026-05-17", count: 1, type: "商品破損" },
-            { site: "昭和冷蔵", date: "2026-06-07", count: 1, type: "商品破損" }
-          ]);
-        }
-        
         const uniqueMonths = Array.from(new Set(formattedData.map((item: any) => item["日付"])))
           .filter(Boolean).sort().reverse() as string[];
         
@@ -690,6 +696,7 @@ export default function CompareDashboardPage() {
     return Array.from(new Set(locs));
   }, [allAccidents]);
 
+  // 💡 【修正反映済み】事故効果測定のイコール対応＆汎用カテゴリ対応ブロック
   const processedAccidents = useMemo(() => {
     return allAccidents.map(acc => {
       const locName = LOCATION_NAME_MAP[acc.location_id] || acc.location_id;
@@ -704,17 +711,25 @@ export default function CompareDashboardPage() {
           const oneMonthLater = new Date(startTarget.getTime() + 30 * 24 * 60 * 60 * 1000);
 
           accSheetLogs.forEach(log => {
-            const matchSite = log.site === locName || log.location_id === acc.location_id;
-            const matchType = log.type === acc.accident_type || log.accident_type === acc.accident_type;
+            const matchSite = log.site === locName || log.site === acc.location_id || (locName && log.site.includes(locName));
+            
+            const logTypeStr = String(log.type || '').trim();
+            const accTypeStr = String(acc.accident_type || '').trim();
+            const accCatStr = String(acc.category || '').trim();
+            
+            const matchType = 
+              (accTypeStr && logTypeStr.includes(accTypeStr)) || 
+              (accCatStr && logTypeStr.includes(accCatStr)) || 
+              logTypeStr === accTypeStr;
             
             if (matchSite && matchType) {
               const logDate = new Date(log.date);
               if (!isNaN(logDate.getTime())) {
                 if (logDate >= oneMonthAgo && logDate < startTarget) {
-                  beforeCount += Number(log.count || log.合計 || 0);
+                  beforeCount += Number(log.count || log.合計 || 1);
                 }
                 if (logDate >= startTarget && logDate <= oneMonthLater) {
-                  afterCount += Number(log.count || log.合計 || 0);
+                  afterCount += Number(log.count || log.合計 || 1);
                 }
               }
             }
@@ -722,7 +737,7 @@ export default function CompareDashboardPage() {
         }
       }
 
-      const isImproved = afterCount < beforeCount;
+      const isImproved = afterCount <= beforeCount;
       const statusLabel = isImproved ? "🟢 改善！" : "⚠️ 効果なし。対策やり直し対象";
 
       return {
@@ -823,7 +838,10 @@ export default function CompareDashboardPage() {
 
       <aside className="w-16 md:w-20 bg-white border-r border-slate-200 flex flex-col items-center py-4 space-y-3 shrink-0 z-10 shadow-sm overflow-y-auto">
         <a href="https://palproductivity-dashboard.vercel.app/" className="p-2 text-slate-400 hover:text-blue-600 transition-colors mb-2">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 0h6"/></svg>
+          {/* 💡 SVGアイコンのエラー修正済み */}
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
         </a>
         <div className="w-full border-t border-slate-100 my-1"></div>
         
@@ -925,7 +943,7 @@ export default function CompareDashboardPage() {
                               </div>
 
                               {item.url && item.url !== "EMPTY" && (
-                                <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit items-center gap-1 mt-1 text-[10px] font-black hover:underline transition-colors px-2 py-1.5 rounded-lg border border-transparent bg-slate-50 text-slate-600 text-rose-600">
+                                <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit items-center gap-1 mt-1 text-[10px] font-black hover:underline transition-colors px-2 py-1.5 rounded-lg border border-transparent bg-slate-50 text-rose-600">
                                   <FileText size={12} /> ワークフローを開く
                                 </a>
                               )}
