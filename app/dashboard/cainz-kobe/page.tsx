@@ -539,212 +539,251 @@ export default function UniversalDashboardPage() {
     });
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
-  // 🌟【真・拠点マスター完全服従 ＆ スマート自動カード生成版（GAS改修不要）】
+  // 🌟【絶対フリーズ回避・完全防弾 ＆ 真・拠点マスター服従版】
   const computedVaultProductivity = useMemo(() => {
-    if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
+    try {
+      if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
 
-    const targetMonthStr = `/${prodSelectedMonth.padStart(2, '0')}/`;
-    let prevM = parseInt(prodSelectedMonth, 10) - 1;
-    if (prevM <= 0) prevM += 12;
-    const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
+      // 💡 安全装置①：数字変換の保証
+      const parseNum = (val: any) => {
+        if (typeof val === 'number') return val;
+        const parsed = Number(val);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+      // 既存の n() があれば使い、無ければ parseNum を使う
+      const getNum = typeof n === 'function' ? n : parseNum;
 
-    const normalize = (str: string) => (str || '').replace(/[（(）)]/g, '').replace(/\s+/g, '').toLowerCase();
+      // 💡 安全装置②：月が「数字の6」で来てもエラーにならないように String で包む
+      const currentMStr = String(prodSelectedMonth || '').padStart(2, '0');
+      const targetMonthStr = `/${currentMStr}/`;
+      
+      let prevM = parseInt(currentMStr, 10) - 1;
+      if (isNaN(prevM) || prevM <= 0) prevM += 12;
+      const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
 
-    // 💡 1. スプシの設定を読み込む
-    const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
-    const rulesStr = data.masterSettings?.VOLUME_SUM_RULES || "";
-    const rules = Array.isArray(rulesStr) ? rulesStr : String(rulesStr).split(',');
+      // 💡 安全装置③：文字が空っぽでも絶対にエラー落ちさせない
+      const normalize = (str: string) => String(str || '').replace(/[（(）)]/g, '').replace(/\s+/g, '').toLowerCase();
 
-    const mappedSources = new Set<string>();
-    const mappedTargets = new Set<string>();
-    const sumRules: {source: string, target: string}[] = [];
+      const rawTarget = data.masterSettings?.TARGET_CATEGORIES;
+      const processNames = Array.isArray(rawTarget) ? rawTarget : (typeof rawTarget === 'string' ? rawTarget.split(',') : []);
 
-    rules.forEach((rule: string) => {
-        const parts = rule.split(':');
-        if (parts.length === 2) {
-            const src = parts[0].trim();
-            const tgt = parts[1].trim();
-            if (src && tgt) {
-                mappedSources.add(normalize(src));
-                mappedTargets.add(tgt);
-                sumRules.push({ source: src, target: tgt });
+      const rulesStr = data.masterSettings?.VOLUME_SUM_RULES;
+      const rules = Array.isArray(rulesStr) ? rulesStr : (typeof rulesStr === 'string' ? rulesStr.split(',') : []);
+
+      const mappedSources = new Set<string>();
+      const mappedTargets = new Set<string>();
+      const sumRules: {source: string, target: string}[] = [];
+
+      rules.forEach((rule: any) => {
+          const parts = String(rule || '').split(':');
+          if (parts.length === 2) {
+              const src = parts[0].trim();
+              const tgt = parts[1].trim();
+              if (src && tgt) {
+                  mappedSources.add(normalize(src));
+                  mappedTargets.add(tgt);
+                  sumRules.push({ source: src, target: tgt });
+              }
+          }
+      });
+
+      const finalCardNames = new Set<string>();
+      processNames.forEach((name: any) => {
+          const trimmed = String(name || '').trim();
+          if (trimmed && !mappedSources.has(normalize(trimmed))) finalCardNames.add(trimmed);
+      });
+      mappedTargets.forEach(tgt => { if (tgt) finalCardNames.add(tgt); });
+
+      const cardsMap = new Map();
+      finalCardNames.forEach(cardName => {
+          cardsMap.set(cardName, { process: cardName, searchKeys: new Set([normalize(cardName)]) });
+      });
+
+      sumRules.forEach(({ source, target }) => {
+          const targetCard = cardsMap.get(target) || Array.from(cardsMap.values()).find(c => normalize(c.process) === normalize(target));
+          if (targetCard) targetCard.searchKeys.add(normalize(source));
+      });
+
+      // 💡 安全装置④：GASからのデータが不正でも絶対にエラーにしない
+      const safeVolumeData = Array.isArray(data.volumeAccumulatedData) ? data.volumeAccumulatedData : [];
+      const safeManhoursData = Array.isArray(data.manhoursAccumulatedData) ? data.manhoursAccumulatedData : [];
+      const safeProdData = Array.isArray(data.productivityAccumulatedData) ? data.productivityAccumulatedData : [];
+
+      const allDatesSet = new Set<string>();
+      const vDict = new Map<string, number>();
+      
+      safeVolumeData.forEach((item: any) => {
+          const itemName = normalize(String(item.title || '').replace('蓄積実績_', ''));
+          const labels = Array.isArray(item.labels) ? item.labels : [];
+          const values = Array.isArray(item.values) ? item.values : [];
+          
+          labels.forEach((date: any, idx: number) => {
+              const dStr = String(date || '');
+              if (dStr.includes(targetMonthStr)) {
+                  allDatesSet.add(dStr);
+                  const key = `${dStr}|${itemName}`;
+                  vDict.set(key, (vDict.get(key) || 0) + getNum(values[idx]));
+              }
+          });
+      });
+
+      const pDict = new Map<string, number>();
+      safeProdData.forEach((item: any) => {
+          const itemName = normalize(String(item.title || '').replace('蓄積実績_作業生産性_', '').replace('蓄積実績_', '').replace('作業生産性_', ''));
+          const labels = Array.isArray(item.labels) ? item.labels : [];
+          const values = Array.isArray(item.values) ? item.values : [];
+          
+          labels.forEach((date: any, idx: number) => {
+              const dStr = String(date || '');
+              if (dStr.includes(targetMonthStr)) {
+                  allDatesSet.add(dStr);
+                  const key = `${dStr}|${itemName}`;
+                  pDict.set(key, (pDict.get(key) || 0) + getNum(values[idx]));
+              }
+          });
+      });
+
+      const hDict = new Map<string, number>();
+      safeManhoursData.forEach((item: any) => {
+          const labels = Array.isArray(item.labels) ? item.labels : [];
+          const values = Array.isArray(item.values) ? item.values : [];
+          
+          labels.forEach((date: any, idx: number) => {
+              const dStr = String(date || '');
+              if (dStr.includes(targetMonthStr)) {
+                  allDatesSet.add(dStr);
+                  hDict.set(dStr, (hDict.get(dStr) || 0) + getNum(values[idx]));
+              }
+          });
+      });
+
+      const getMonthSummary = (monthStr: string) => {
+          let vol = 0; let hrs = 0;
+          const validVolKeys = new Set<string>();
+          cardsMap.forEach(cardDef => cardDef.searchKeys.forEach((k: string) => validVolKeys.add(k)));
+
+          safeVolumeData.forEach((item: any) => {
+              if (validVolKeys.has(normalize(String(item.title || '').replace('蓄積実績_', '')))) {
+                  const labels = Array.isArray(item.labels) ? item.labels : [];
+                  const values = Array.isArray(item.values) ? item.values : [];
+                  labels.forEach((date: any, idx: number) => {
+                      if (String(date || '').includes(monthStr)) vol += getNum(values[idx]);
+                  });
+              }
+          });
+          safeManhoursData.forEach((item: any) => {
+              const labels = Array.isArray(item.labels) ? item.labels : [];
+              const values = Array.isArray(item.values) ? item.values : [];
+              labels.forEach((date: any, idx: number) => {
+                  if (String(date || '').includes(monthStr)) hrs += getNum(values[idx]);
+              });
+          });
+          return { vol, hrs, prod: hrs > 0 ? vol / hrs : 0 };
+      };
+
+      const prevSummary = getMonthSummary(prevMonthStr);
+      const calcRatio = (curr: number, prev: number) => prev > 0 ? (curr / prev) * 100 : 0;
+      const allDates = Array.from(allDatesSet).sort();
+
+      let centerTotalVolume = 0;
+      let centerTotalHours = 0;
+
+      const items = Array.from(cardsMap.values()).map(cardDef => {
+        let procTotalVolume = 0;
+        let prodSum = 0;
+        let prodCount = 0;
+
+        const dailyList = allDates.map(dt => {
+          let vol = 0;
+          let prod = 0;
+          let prodValidItems = 0;
+
+          cardDef.searchKeys.forEach((searchKey: string) => {
+            const vKey = `${dt}|${searchKey}`;
+            if (vDict.has(vKey)) vol += vDict.get(vKey)!;
+
+            const pKey = `${dt}|${searchKey}`;
+            if (pDict.has(pKey) && pDict.get(pKey)! > 0) {
+                prod += pDict.get(pKey)!;
+                prodValidItems++;
             }
-        }
-    });
+          });
 
-    // 💡 2. 画面に出すカードを「全自動」で決定する
-    const finalCardNames = new Set<string>();
-    processNames.forEach((name: string) => {
-        const trimmed = name.trim();
-        // どこかのカードの子分（合体元）になっていないものだけ、独立したカードとして残す
-        if (!mappedSources.has(normalize(trimmed))) {
-            finalCardNames.add(trimmed);
-        }
-    });
-    // 合体先（親カード）として指定された名前は無条件でカード化する
-    mappedTargets.forEach(tgt => finalCardNames.add(tgt));
+          const finalProd = prodValidItems > 0 ? prod / prodValidItems : 0;
+          procTotalVolume += vol;
+          if (finalProd > 0) { prodSum += finalProd; prodCount++; }
 
-    const cardsMap = new Map();
-    finalCardNames.forEach(cardName => {
-        cardsMap.set(cardName, {
-            process: cardName,
-            searchKeys: [normalize(cardName)]
+          const formattedDate = dt.includes('/') ? dt.split('/').slice(1).join('/') : dt;
+          return { date: formattedDate, volume: vol, hours: 0, prod: finalProd };
         });
-    });
 
-    // 💡 3. 親カードに子分の検索キー（合算ルール）を追加する
-    sumRules.forEach(({ source, target }) => {
-        const targetCard = cardsMap.get(target) || Array.from(cardsMap.values()).find(c => normalize(c.process) === normalize(target));
-        if (targetCard) {
-            targetCard.searchKeys.push(normalize(source));
-        }
-    });
+        const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
+        centerTotalVolume += procTotalVolume;
 
-    const getMonthSummary = (monthStr: string) => {
-        let vol = 0; let hrs = 0;
+        return { process: cardDef.process, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
+      });
+
+      centerTotalHours = Array.from(hDict.values()).reduce((sum, val) => sum + val, 0);
+
+      const centerDailyList = allDates.map(dt => {
         const validVolKeys = new Set<string>();
         cardsMap.forEach(cardDef => cardDef.searchKeys.forEach((k: string) => validVolKeys.add(k)));
-
-        if (data.volumeAccumulatedData) {
-            data.volumeAccumulatedData.forEach((item: any) => {
-                const itemName = item.title.replace('蓄積実績_', '');
-                if (validVolKeys.has(normalize(itemName))) {
-                    item.labels.forEach((date: string, idx: number) => {
-                        if (date.includes(monthStr)) vol += n(item.values[idx]);
-                    });
-                }
-            });
-        }
-        if (data.manhoursAccumulatedData) {
-            data.manhoursAccumulatedData.forEach((item: any) => {
-                item.labels.forEach((date: string, idx: number) => {
-                    if (date.includes(monthStr)) hrs += n(item.values[idx]);
-                });
-            });
-        }
-        return { vol, hrs, prod: hrs > 0 ? vol / hrs : 0 };
-    };
-
-    const prevSummary = getMonthSummary(prevMonthStr);
-    const calcRatio = (curr: number, prev: number) => prev > 0 ? (curr / prev) * 100 : 0;
-
-    const vRows: any[] = [];
-    if (data.volumeAccumulatedData) {
-      data.volumeAccumulatedData.forEach((item: any) => {
-        const itemName = item.title.replace('蓄積実績_', '');
-        item.labels.forEach((date: string, idx: number) => {
-          if (date.includes(targetMonthStr)) vRows.push({ date, item: itemName, value: n(item.values[idx]) });
+        
+        let dayVol = 0;
+        validVolKeys.forEach(key => {
+            const vKey = `${dt}|${key}`;
+            if (vDict.has(vKey)) dayVol += vDict.get(vKey)!;
         });
+
+        const dayHrs = hDict.get(dt) || 0;
+        const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
+        
+        const formattedDate = dt.includes('/') ? dt.split('/').slice(1).join('/') : dt;
+        return { date: formattedDate, volume: dayVol, hours: dayHrs, prod: dayProd };
       });
+
+      const centerTotalProd = centerTotalHours > 0 ? centerTotalVolume / centerTotalHours : 0;
+      items.unshift({ process: "★ 合計", dailyList: centerDailyList, totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd });
+
+      return { items, summary: { totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd, lastMonthRatio: { vol: calcRatio(centerTotalVolume, prevSummary.vol), hrs: calcRatio(centerTotalHours, prevSummary.hrs), prod: calcRatio(centerTotalProd, prevSummary.prod) } } };
+
+    } catch (error) {
+      // 🚨 万が一内部でエラーが起きても、絶対にクラッシュさせずに空のデータを返す
+      console.error("ダッシュボード計算エラー:", error);
+      return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
     }
-
-    const hTotalRows: any[] = [];
-    if (data.manhoursAccumulatedData) {
-      data.manhoursAccumulatedData.forEach((item: any) => {
-        item.labels.forEach((date: string, idx: number) => {
-          if (date.includes(targetMonthStr)) {
-            const existing = hTotalRows.find(h => h.date === date);
-            if (existing) existing.value += n(item.values[idx]);
-            else hTotalRows.push({ date, value: n(item.values[idx]) });
-          }
-        });
-      });
-    }
-
-    const pRows: any[] = [];
-    if (data.productivityAccumulatedData) {
-      data.productivityAccumulatedData.forEach((item: any) => {
-        const itemName = item.title.replace('蓄積実績_作業生産性_', '').replace('蓄積実績_', '').replace('作業生産性_', '');
-        item.labels.forEach((date: string, idx: number) => {
-          if (date.includes(targetMonthStr)) pRows.push({ date, item: itemName, value: n(item.values[idx]) });
-        });
-      });
-    }
-
-    const allDates = Array.from(new Set([...vRows.map((r: any) => r.date), ...hTotalRows.map((r: any) => r.date), ...pRows.map((r: any) => r.date)])).sort();
-
-    let centerTotalVolume = 0;
-    let centerTotalHours = 0;
-
-    const items = Array.from(cardsMap.values()).map(cardDef => {
-      let procTotalVolume = 0;
-      let prodSum = 0;
-      let prodCount = 0;
-
-      const dailyList = allDates.map(dt => {
-        let vol = 0;
-        let prod = 0;
-        let prodValidItems = 0;
-
-        const seenVols = new Set();
-        const seenProds = new Set();
-
-        cardDef.searchKeys.forEach((searchKey: string) => {
-          vRows.forEach((r: any) => {
-            if (r.date === dt && normalize(r.item) === searchKey && !seenVols.has(searchKey)) {
-              vol += r.value;
-              seenVols.add(searchKey);
-            }
-          });
-
-          pRows.forEach((r: any) => {
-            if (r.date === dt && normalize(r.item) === searchKey && !seenProds.has(searchKey)) {
-              if (r.value > 0) {
-                prod += r.value;
-                prodValidItems++;
-              }
-              seenProds.add(searchKey);
-            }
-          });
-        });
-
-        const finalProd = prodValidItems > 0 ? prod / prodValidItems : 0;
-        procTotalVolume += vol;
-        if (finalProd > 0) {
-            prodSum += finalProd;
-            prodCount++;
-        }
-
-        return { date: dt.split('/').slice(1).join('/'), volume: vol, hours: 0, prod: finalProd };
-      });
-
-      const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
-      centerTotalVolume += procTotalVolume;
-
-      return { process: cardDef.process, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
-    });
-
-    centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
-
-    const centerDailyList = allDates.map(dt => {
-      const validVolKeys = new Set<string>();
-      cardsMap.forEach(cardDef => cardDef.searchKeys.forEach((k: string) => validVolKeys.add(k)));
-
-      const seenDayVols = new Set();
-      let dayVol = 0;
-      vRows.forEach((r: any) => {
-          if (r.date === dt && validVolKeys.has(normalize(r.item)) && !seenDayVols.has(normalize(r.item))) {
-              dayVol += r.value;
-              seenDayVols.add(normalize(r.item));
-          }
-      });
-
-      const dayHrsRow = hTotalRows.find((r: any) => r.date === dt);
-      const dayHrs = dayHrsRow ? dayHrsRow.value : 0;
-      const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
-      return { date: dt.split('/').slice(1).join('/'), volume: dayVol, hours: dayHrs, prod: dayProd };
-    });
-
-    const centerTotalProd = centerTotalHours > 0 ? centerTotalVolume / centerTotalHours : 0;
-
-    items.unshift({ process: "★ 合計", dailyList: centerDailyList, totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd });
-
-    return { items, summary: { totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd, lastMonthRatio: { vol: calcRatio(centerTotalVolume, prevSummary.vol), hrs: calcRatio(centerTotalHours, prevSummary.hrs), prod: calcRatio(centerTotalProd, prevSummary.prod) } } };
   }, [data, prodSelectedMonth]);
+
+  // 🌟 請負予実の計算ロジック
+  const contractList = (() => {
+    try {
+      if (!data || !data.contractYojitsuData) return [];
+      const cMap = new Map();
+      data.contractYojitsuData.forEach((item: any) => {
+        if (!item.title) return;
+        const isYosan = String(item.title).startsWith('予算_');
+        const isJisseki = String(item.title).startsWith('実績_');
+        const cleanTitle = String(item.title).replace('予算_', '').replace('実績_', '');
+        if (!cMap.has(cleanTitle)) {
+          cMap.set(cleanTitle, { title: cleanTitle, labels: item.labels || [], actual: new Array((item.labels || []).length).fill(0), forecast: new Array((item.labels || []).length).fill(0) });
+        }
+        const entry = cMap.get(cleanTitle);
+        if (isJisseki) entry.actual = item.values || [];
+        if (isYosan) entry.forecast = item.values || [];
+      });
+      let list = Array.from(cMap.values());
+      if (searchQuery) list = list.filter((m: any) => String(m.title).toLowerCase().includes(String(searchQuery).toLowerCase()));
+      return list;
+    } catch (error) {
+      console.error("請負予実計算エラー:", error);
+      return [];
+    }
+  })();
   
   // =========================================================
   // 🚨 事故管理ダッシュボード用の計算ロジック
   // =========================================================
+
   const getLevelStyles = (count: number) => {
     if (count >= 3) return { cardBorder: 'border-rose-100', bg: 'bg-rose-50', text: 'text-rose-600', meterBorder: 'border-rose-400', icon: <AccidentIcon className="text-rose-500" size={22} /> };
     if (count === 2) return { cardBorder: 'border-amber-100', bg: 'bg-amber-50', text: 'text-amber-600', meterBorder: 'border-amber-400', icon: <AlertTriangle className="text-amber-500" size={22} /> };
