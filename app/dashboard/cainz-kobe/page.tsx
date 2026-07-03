@@ -539,7 +539,7 @@ export default function UniversalDashboardPage() {
     });
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
-  // 🌟【真・拠点マスター完全服従 ＆ N:1自由マッピング版】
+  // 🌟【真・拠点マスター完全服従 ＆ N:1自由マッピング版 ＋ 蓄積GAS競合回避】
   const computedVaultProductivity = useMemo(() => {
     if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
     
@@ -548,21 +548,25 @@ export default function UniversalDashboardPage() {
     if (prevM <= 0) prevM += 12;
     const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
 
-    // 🔥 全角/半角カッコやスペースを無視する正規化関数
     const normalize = (str: string) => (str || '').replace(/[（(）)]/g, '').replace(/\s+/g, '').toLowerCase();
 
-    // 💡 1. 画面に出したいカード（TARGET_CATEGORIES）をベースに枠を作る
-    const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
+    // 💡 1. 画面に出したいカードを決定する
+    // マスターに DISPLAY_CARDS が設定されていればそれを画面用の枠とし、なければ TARGET_CATEGORIES を流用する
+    const rawDisplay = data.masterSettings?.DISPLAY_CARDS;
+    const processNames = rawDisplay 
+      ? (Array.isArray(rawDisplay) ? rawDisplay : String(rawDisplay).split(',').map(s => s.trim()).filter(Boolean))
+      : (data.masterSettings?.TARGET_CATEGORIES || []);
+
     const cardsMap = new Map();
-    
     processNames.forEach((cardName: string) => {
-      cardsMap.set(cardName, {
-        process: cardName, // カードの表示名
-        searchKeys: [normalize(cardName)] // デフォルトで自分自身の名前は検索対象にする
+      const trimmed = cardName.trim();
+      cardsMap.set(trimmed, {
+        process: trimmed,
+        searchKeys: [normalize(trimmed)]
       });
     });
 
-    // 💡 2. マスター設定の合算ルール（VOLUME_SUM_RULES）を解析し、検索キーを追加する
+    // 💡 2. 合算ルール（VOLUME_SUM_RULES）の解析
     if (data.masterSettings?.VOLUME_SUM_RULES) {
       const rulesStr = data.masterSettings.VOLUME_SUM_RULES;
       const rules = Array.isArray(rulesStr) ? rulesStr : String(rulesStr).split(',');
@@ -570,10 +574,9 @@ export default function UniversalDashboardPage() {
       rules.forEach((rule: string) => {
         const parts = rule.split(':');
         if (parts.length === 2) {
-          const sourceName = parts[0].trim();  // 例: 1次仕分け
-          const targetCardName = parts[1].trim(); // 例: T-sort（PC/RS込）
+          const sourceName = parts[0].trim();
+          const targetCardName = parts[1].trim();
 
-          // 紐付け先のカードが存在すれば、そこに子分として検索キーを追加
           const targetCard = cardsMap.get(targetCardName) || Array.from(cardsMap.values()).find(c => normalize(c.process) === normalize(targetCardName));
           if (targetCard) {
             targetCard.searchKeys.push(normalize(sourceName));
@@ -648,7 +651,6 @@ export default function UniversalDashboardPage() {
     let centerTotalVolume = 0;
     let centerTotalHours = 0;
     
-    // 💡 3. カードごとの日次計算
     const items = Array.from(cardsMap.values()).map(cardDef => {
       let procTotalVolume = 0;
       let prodSum = 0;
@@ -659,12 +661,10 @@ export default function UniversalDashboardPage() {
         let prod = 0;
         let prodValidItems = 0;
         
-        // 重複して合算しないためのチェック用
         const seenVols = new Set();
         const seenProds = new Set();
         
         cardDef.searchKeys.forEach((searchKey: string) => {
-          // 物量の集計
           vRows.forEach((r: any) => {
             if (r.date === dt && normalize(r.item) === searchKey && !seenVols.has(searchKey)) {
               vol += r.value;
@@ -672,7 +672,6 @@ export default function UniversalDashboardPage() {
             }
           });
           
-          // 生産性の集計
           pRows.forEach((r: any) => {
             if (r.date === dt && normalize(r.item) === searchKey && !seenProds.has(searchKey)) {
               if (r.value > 0) {
@@ -685,7 +684,6 @@ export default function UniversalDashboardPage() {
         });
         
         const finalProd = prodValidItems > 0 ? prod / prodValidItems : 0;
-        
         procTotalVolume += vol;
         if (finalProd > 0) {
             prodSum += finalProd;
@@ -753,7 +751,6 @@ export default function UniversalDashboardPage() {
   // =========================================================
   // 🚨 事故管理ダッシュボード用の計算ロジック
   // =========================================================
-
   const getLevelStyles = (count: number) => {
     if (count >= 3) return { cardBorder: 'border-rose-100', bg: 'bg-rose-50', text: 'text-rose-600', meterBorder: 'border-rose-400', icon: <AccidentIcon className="text-rose-500" size={22} /> };
     if (count === 2) return { cardBorder: 'border-amber-100', bg: 'bg-amber-50', text: 'text-amber-600', meterBorder: 'border-amber-400', icon: <AlertTriangle className="text-amber-500" size={22} /> };
