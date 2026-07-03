@@ -539,10 +539,10 @@ export default function UniversalDashboardPage() {
     });
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
-  // 🌟【真・拠点マスター完全服従 ＆ N:1自由マッピング版 ＋ 蓄積GAS競合回避】
+  // 🌟【真・拠点マスター完全服従 ＆ スマート自動カード生成版（GAS改修不要）】
   const computedVaultProductivity = useMemo(() => {
     if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
-    
+
     const targetMonthStr = `/${prodSelectedMonth.padStart(2, '0')}/`;
     let prevM = parseInt(prodSelectedMonth, 10) - 1;
     if (prevM <= 0) prevM += 12;
@@ -550,40 +550,55 @@ export default function UniversalDashboardPage() {
 
     const normalize = (str: string) => (str || '').replace(/[（(）)]/g, '').replace(/\s+/g, '').toLowerCase();
 
-    // 💡 1. 画面に出したいカードを決定する
-    // マスターに DISPLAY_CARDS が設定されていればそれを画面用の枠とし、なければ TARGET_CATEGORIES を流用する
-    const rawDisplay = data.masterSettings?.DISPLAY_CARDS;
-    const processNames = rawDisplay 
-      ? (Array.isArray(rawDisplay) ? rawDisplay : String(rawDisplay).split(',').map(s => s.trim()).filter(Boolean))
-      : (data.masterSettings?.TARGET_CATEGORIES || []);
+    // 💡 1. スプシの設定を読み込む
+    const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
+    const rulesStr = data.masterSettings?.VOLUME_SUM_RULES || "";
+    const rules = Array.isArray(rulesStr) ? rulesStr : String(rulesStr).split(',');
 
-    const cardsMap = new Map();
-    processNames.forEach((cardName: string) => {
-      const trimmed = cardName.trim();
-      cardsMap.set(trimmed, {
-        process: trimmed,
-        searchKeys: [normalize(trimmed)]
-      });
-    });
+    const mappedSources = new Set<string>();
+    const mappedTargets = new Set<string>();
+    const sumRules: {source: string, target: string}[] = [];
 
-    // 💡 2. 合算ルール（VOLUME_SUM_RULES）の解析
-    if (data.masterSettings?.VOLUME_SUM_RULES) {
-      const rulesStr = data.masterSettings.VOLUME_SUM_RULES;
-      const rules = Array.isArray(rulesStr) ? rulesStr : String(rulesStr).split(',');
-      
-      rules.forEach((rule: string) => {
+    rules.forEach((rule: string) => {
         const parts = rule.split(':');
         if (parts.length === 2) {
-          const sourceName = parts[0].trim();
-          const targetCardName = parts[1].trim();
-
-          const targetCard = cardsMap.get(targetCardName) || Array.from(cardsMap.values()).find(c => normalize(c.process) === normalize(targetCardName));
-          if (targetCard) {
-            targetCard.searchKeys.push(normalize(sourceName));
-          }
+            const src = parts[0].trim();
+            const tgt = parts[1].trim();
+            if (src && tgt) {
+                mappedSources.add(normalize(src));
+                mappedTargets.add(tgt);
+                sumRules.push({ source: src, target: tgt });
+            }
         }
-      });
-    }
+    });
+
+    // 💡 2. 画面に出すカードを「全自動」で決定する
+    const finalCardNames = new Set<string>();
+    processNames.forEach((name: string) => {
+        const trimmed = name.trim();
+        // どこかのカードの子分（合体元）になっていないものだけ、独立したカードとして残す
+        if (!mappedSources.has(normalize(trimmed))) {
+            finalCardNames.add(trimmed);
+        }
+    });
+    // 合体先（親カード）として指定された名前は無条件でカード化する
+    mappedTargets.forEach(tgt => finalCardNames.add(tgt));
+
+    const cardsMap = new Map();
+    finalCardNames.forEach(cardName => {
+        cardsMap.set(cardName, {
+            process: cardName,
+            searchKeys: [normalize(cardName)]
+        });
+    });
+
+    // 💡 3. 親カードに子分の検索キー（合算ルール）を追加する
+    sumRules.forEach(({ source, target }) => {
+        const targetCard = cardsMap.get(target) || Array.from(cardsMap.values()).find(c => normalize(c.process) === normalize(target));
+        if (targetCard) {
+            targetCard.searchKeys.push(normalize(source));
+        }
+    });
 
     const getMonthSummary = (monthStr: string) => {
         let vol = 0; let hrs = 0;
@@ -645,25 +660,25 @@ export default function UniversalDashboardPage() {
         });
       });
     }
-    
+
     const allDates = Array.from(new Set([...vRows.map((r: any) => r.date), ...hTotalRows.map((r: any) => r.date), ...pRows.map((r: any) => r.date)])).sort();
-    
+
     let centerTotalVolume = 0;
     let centerTotalHours = 0;
-    
+
     const items = Array.from(cardsMap.values()).map(cardDef => {
       let procTotalVolume = 0;
       let prodSum = 0;
       let prodCount = 0;
-      
+
       const dailyList = allDates.map(dt => {
         let vol = 0;
         let prod = 0;
         let prodValidItems = 0;
-        
+
         const seenVols = new Set();
         const seenProds = new Set();
-        
+
         cardDef.searchKeys.forEach((searchKey: string) => {
           vRows.forEach((r: any) => {
             if (r.date === dt && normalize(r.item) === searchKey && !seenVols.has(searchKey)) {
@@ -671,7 +686,7 @@ export default function UniversalDashboardPage() {
               seenVols.add(searchKey);
             }
           });
-          
+
           pRows.forEach((r: any) => {
             if (r.date === dt && normalize(r.item) === searchKey && !seenProds.has(searchKey)) {
               if (r.value > 0) {
@@ -682,29 +697,29 @@ export default function UniversalDashboardPage() {
             }
           });
         });
-        
+
         const finalProd = prodValidItems > 0 ? prod / prodValidItems : 0;
         procTotalVolume += vol;
         if (finalProd > 0) {
             prodSum += finalProd;
             prodCount++;
         }
-        
+
         return { date: dt.split('/').slice(1).join('/'), volume: vol, hours: 0, prod: finalProd };
       });
-      
+
       const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
       centerTotalVolume += procTotalVolume;
 
       return { process: cardDef.process, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
     });
-    
+
     centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
-    
+
     const centerDailyList = allDates.map(dt => {
       const validVolKeys = new Set<string>();
       cardsMap.forEach(cardDef => cardDef.searchKeys.forEach((k: string) => validVolKeys.add(k)));
-      
+
       const seenDayVols = new Set();
       let dayVol = 0;
       vRows.forEach((r: any) => {
@@ -719,35 +734,14 @@ export default function UniversalDashboardPage() {
       const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
       return { date: dt.split('/').slice(1).join('/'), volume: dayVol, hours: dayHrs, prod: dayProd };
     });
-    
+
     const centerTotalProd = centerTotalHours > 0 ? centerTotalVolume / centerTotalHours : 0;
-    
+
     items.unshift({ process: "★ 合計", dailyList: centerDailyList, totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd });
-    
+
     return { items, summary: { totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd, lastMonthRatio: { vol: calcRatio(centerTotalVolume, prevSummary.vol), hrs: calcRatio(centerTotalHours, prevSummary.hrs), prod: calcRatio(centerTotalProd, prevSummary.prod) } } };
   }, [data, prodSelectedMonth]);
-
-  // 🌟 請負予実の計算ロジック（エラー回避用）
-  const contractList = (() => {
-    if (!data || !data.contractYojitsuData) return [];
-    const cMap = new Map();
-    data.contractYojitsuData.forEach((item: any) => {
-      if (!item.title) return;
-      const isYosan = item.title.startsWith('予算_');
-      const isJisseki = item.title.startsWith('実績_');
-      const cleanTitle = item.title.replace('予算_', '').replace('実績_', '');
-      if (!cMap.has(cleanTitle)) {
-        cMap.set(cleanTitle, { title: cleanTitle, labels: item.labels || [], actual: new Array((item.labels || []).length).fill(0), forecast: new Array((item.labels || []).length).fill(0) });
-      }
-      const entry = cMap.get(cleanTitle);
-      if (isJisseki) entry.actual = item.values;
-      if (isYosan) entry.forecast = item.values;
-    });
-    let list = Array.from(cMap.values());
-    if (searchQuery) list = list.filter((m: any) => m.title.toLowerCase().includes(searchQuery.toLowerCase()));
-    return list;
-  })();
-
+  
   // =========================================================
   // 🚨 事故管理ダッシュボード用の計算ロジック
   // =========================================================
