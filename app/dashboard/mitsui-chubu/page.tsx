@@ -482,10 +482,9 @@ export default function UniversalDashboardPage() {
         });
 
         if (!hasFct && validChakuchiDays > 0 && validChakuchiDays < currentMonthIndices.length && !isAvgMetric && !m.title.match(/外注費|募集|事故/)) {
-  
-          const dailyAvg = totalChakuchi / validChakuchiDays; 
-          totalChakuchi = dailyAvg * currentMonthIndices.length;
-        }
+  const dailyAvg = totalChakuchi / validChakuchiDays; 
+  totalChakuchi = dailyAvg * currentMonthIndices.length;
+}
 
         const finalBudget = isAvgMetric && validBudgetDays > 0 ? totalBudget / validBudgetDays : totalBudget;
         const finalChakuchi = isAvgMetric && validChakuchiDays > 0 ? totalChakuchi / validChakuchiDays : totalChakuchi;
@@ -539,58 +538,25 @@ export default function UniversalDashboardPage() {
     });
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
-  // 🌟【真・拠点マスター完全服従 ＆ N:1自由マッピング版】
+  // 🌟【先月比計算＆「★ 合計」への名称短縮】
   const computedVaultProductivity = useMemo(() => {
     if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
     
     const targetMonthStr = `/${prodSelectedMonth.padStart(2, '0')}/`;
+    
     let prevM = parseInt(prodSelectedMonth, 10) - 1;
     if (prevM <= 0) prevM += 12;
     const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
 
-    // 🔥 全角/半角カッコやスペースを無視する正規化関数
-    const normalize = (str: string) => (str || '').replace(/[（(）)]/g, '').replace(/\s+/g, '').toLowerCase();
-
-    // 💡 1. 画面に出したいカード（TARGET_CATEGORIES）をベースに枠を作る
-    const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
-    const cardsMap = new Map();
-    
-    processNames.forEach((cardName: string) => {
-      cardsMap.set(cardName, {
-        process: cardName, // カードの表示名
-        searchKeys: [normalize(cardName)] // デフォルトで自分自身の名前は検索対象にする
-      });
-    });
-
-    // 💡 2. マスター設定の合算ルール（VOLUME_SUM_RULES）を解析し、検索キーを追加する
-    if (data.masterSettings?.VOLUME_SUM_RULES) {
-      const rulesStr = data.masterSettings.VOLUME_SUM_RULES;
-      const rules = Array.isArray(rulesStr) ? rulesStr : String(rulesStr).split(',');
-      
-      rules.forEach((rule: string) => {
-        const parts = rule.split(':');
-        if (parts.length === 2) {
-          const sourceName = parts[0].trim();  // 例: 1次仕分け
-          const targetCardName = parts[1].trim(); // 例: T-sort（PC/RS込）
-
-          // 紐付け先のカードが存在すれば、そこに子分として検索キーを追加
-          const targetCard = cardsMap.get(targetCardName) || Array.from(cardsMap.values()).find(c => normalize(c.process) === normalize(targetCardName));
-          if (targetCard) {
-            targetCard.searchKeys.push(normalize(sourceName));
-          }
-        }
-      });
-    }
-
     const getMonthSummary = (monthStr: string) => {
-        let vol = 0; let hrs = 0;
-        const validVolKeys = new Set<string>();
-        cardsMap.forEach(cardDef => cardDef.searchKeys.forEach((k: string) => validVolKeys.add(k)));
+        let vol = 0;
+        let hrs = 0;
+        const processNames = data.masterSettings?.TARGET_CATEGORIES || ["リコス", "リコスアイス", "BB", "ユニー一括", "汎用"];
 
         if (data.volumeAccumulatedData) {
             data.volumeAccumulatedData.forEach((item: any) => {
                 const itemName = item.title.replace('蓄積実績_', '');
-                if (validVolKeys.has(normalize(itemName))) {
+                if (processNames.includes(itemName)) {
                     item.labels.forEach((date: string, idx: number) => {
                         if (date.includes(monthStr)) vol += n(item.values[idx]);
                     });
@@ -604,7 +570,8 @@ export default function UniversalDashboardPage() {
                 });
             });
         }
-        return { vol, hrs, prod: hrs > 0 ? vol / hrs : 0 };
+        const prod = hrs > 0 ? vol / hrs : 0;
+        return { vol, hrs, prod };
     };
 
     const prevSummary = getMonthSummary(prevMonthStr);
@@ -615,7 +582,9 @@ export default function UniversalDashboardPage() {
       data.volumeAccumulatedData.forEach((item: any) => {
         const itemName = item.title.replace('蓄積実績_', '');
         item.labels.forEach((date: string, idx: number) => {
-          if (date.includes(targetMonthStr)) vRows.push({ date, item: itemName, value: n(item.values[idx]) });
+          if (date.includes(targetMonthStr)) {
+            vRows.push({ date: date, item: itemName, value: n(item.values[idx]) });
+          }
         });
       });
     }
@@ -626,8 +595,11 @@ export default function UniversalDashboardPage() {
         item.labels.forEach((date: string, idx: number) => {
           if (date.includes(targetMonthStr)) {
             const existing = hTotalRows.find(h => h.date === date);
-            if (existing) existing.value += n(item.values[idx]);
-            else hTotalRows.push({ date, value: n(item.values[idx]) });
+            if (existing) {
+              existing.value += n(item.values[idx]);
+            } else {
+              hTotalRows.push({ date: date, value: n(item.values[idx]) });
+            }
           }
         });
       });
@@ -636,86 +608,65 @@ export default function UniversalDashboardPage() {
     const pRows: any[] = [];
     if (data.productivityAccumulatedData) {
       data.productivityAccumulatedData.forEach((item: any) => {
-        const itemName = item.title.replace('蓄積実績_作業生産性_', '').replace('蓄積実績_', '').replace('作業生産性_', '');
+        const itemName = item.title.replace('蓄積実績_作業生産性_', '');
         item.labels.forEach((date: string, idx: number) => {
-          if (date.includes(targetMonthStr)) pRows.push({ date, item: itemName, value: n(item.values[idx]) });
+          if (date.includes(targetMonthStr)) {
+            pRows.push({ date: date, item: itemName, value: n(item.values[idx]) });
+          }
         });
       });
     }
     
-    const allDates = Array.from(new Set([...vRows.map((r: any) => r.date), ...hTotalRows.map((r: any) => r.date), ...pRows.map((r: any) => r.date)])).sort();
+    const allDates = Array.from(new Set([
+      ...vRows.map((r: any) => r.date),
+      ...hTotalRows.map((r: any) => r.date),
+      ...pRows.map((r: any) => r.date)
+    ])).sort();
+    
+    const processNames = data.masterSettings?.TARGET_CATEGORIES || ["リコス", "リコスアイス", "BB", "ユニー一括", "汎用"];
     
     let centerTotalVolume = 0;
     let centerTotalHours = 0;
     
-    // 💡 3. カードごとの日次計算
-    const items = Array.from(cardsMap.values()).map(cardDef => {
+    const items = processNames.map((proc: string) => {
       let procTotalVolume = 0;
       let prodSum = 0;
       let prodCount = 0;
       
+      let prodName = proc;
+      if (data.masterSettings?.NAME_MAPPING && data.masterSettings.NAME_MAPPING[proc]) {
+        prodName = data.masterSettings.NAME_MAPPING[proc];
+      } else {
+        if (proc === "ユニー一括") prodName = "ユニー";
+        if (proc === "BB") prodName = "ブロンコビリー";
+      }
+      
       const dailyList = allDates.map(dt => {
-        let vol = 0;
-        let prod = 0;
-        let prodValidItems = 0;
+        const vMob = vRows.find((r: any) => r.date === dt && r.item === proc);
+        const vol = vMob ? vMob.value : 0;
         
-        // 重複して合算しないためのチェック用
-        const seenVols = new Set();
-        const seenProds = new Set();
-        
-        cardDef.searchKeys.forEach((searchKey: string) => {
-          // 物量の集計
-          vRows.forEach((r: any) => {
-            if (r.date === dt && normalize(r.item) === searchKey && !seenVols.has(searchKey)) {
-              vol += r.value;
-              seenVols.add(searchKey);
-            }
-          });
-          
-          // 生産性の集計
-          pRows.forEach((r: any) => {
-            if (r.date === dt && normalize(r.item) === searchKey && !seenProds.has(searchKey)) {
-              if (r.value > 0) {
-                prod += r.value;
-                prodValidItems++;
-              }
-              seenProds.add(searchKey);
-            }
-          });
-        });
-        
-        const finalProd = prodValidItems > 0 ? prod / prodValidItems : 0;
+        const pMob = pRows.find((r: any) => r.date === dt && r.item === prodName);
+        const prod = pMob ? pMob.value : 0;
         
         procTotalVolume += vol;
-        if (finalProd > 0) {
-            prodSum += finalProd;
+        if (prod > 0) {
+            prodSum += prod;
             prodCount++;
         }
         
-        return { date: dt.split('/').slice(1).join('/'), volume: vol, hours: 0, prod: finalProd };
+        return { date: dt.split('/').slice(1).join('/'), volume: vol, hours: 0, prod: prod };
       });
       
       const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
       centerTotalVolume += procTotalVolume;
 
-      return { process: cardDef.process, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
+      return { process: proc, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
     });
     
     centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
     
     const centerDailyList = allDates.map(dt => {
-      const validVolKeys = new Set<string>();
-      cardsMap.forEach(cardDef => cardDef.searchKeys.forEach((k: string) => validVolKeys.add(k)));
-      
-      const seenDayVols = new Set();
-      let dayVol = 0;
-      vRows.forEach((r: any) => {
-          if (r.date === dt && validVolKeys.has(normalize(r.item)) && !seenDayVols.has(normalize(r.item))) {
-              dayVol += r.value;
-              seenDayVols.add(normalize(r.item));
-          }
-      });
-
+      const dayVol = vRows.filter((r: any) => r.date === dt && processNames.includes(r.item)).reduce((sum: number, r: any) => sum + r.value, 0);
       const dayHrsRow = hTotalRows.find((r: any) => r.date === dt);
       const dayHrs = dayHrsRow ? dayHrsRow.value : 0;
       const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
@@ -724,12 +675,29 @@ export default function UniversalDashboardPage() {
     
     const centerTotalProd = centerTotalHours > 0 ? centerTotalVolume / centerTotalHours : 0;
     
-    items.unshift({ process: "★ 合計", dailyList: centerDailyList, totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd });
+    items.unshift({
+      process: "★ 合計", // 💡 左端カードのタイトル短縮
+      dailyList: centerDailyList,
+      totalVolume: centerTotalVolume,
+      totalHours: centerTotalHours,
+      totalProd: centerTotalProd
+    });
     
-    return { items, summary: { totalVolume: centerTotalVolume, totalHours: centerTotalHours, totalProd: centerTotalProd, lastMonthRatio: { vol: calcRatio(centerTotalVolume, prevSummary.vol), hrs: calcRatio(centerTotalHours, prevSummary.hrs), prod: calcRatio(centerTotalProd, prevSummary.prod) } } };
+    return { 
+      items, 
+      summary: { 
+        totalVolume: centerTotalVolume, 
+        totalHours: centerTotalHours, 
+        totalProd: centerTotalProd,
+        lastMonthRatio: {
+            vol: calcRatio(centerTotalVolume, prevSummary.vol),
+            hrs: calcRatio(centerTotalHours, prevSummary.hrs),
+            prod: calcRatio(centerTotalProd, prevSummary.prod)
+        }
+      } 
+    };
   }, [data, prodSelectedMonth]);
 
-  // 🌟 請負予実の計算ロジック（エラー回避用）
   const contractList = (() => {
     if (!data || !data.contractYojitsuData) return [];
     const cMap = new Map();
@@ -746,7 +714,7 @@ export default function UniversalDashboardPage() {
       if (isYosan) entry.forecast = item.values;
     });
     let list = Array.from(cMap.values());
-    if (searchQuery) list = list.filter((m: any) => m.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (searchQuery) list = list.filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase()));
     return list;
   })();
 
@@ -928,18 +896,34 @@ export default function UniversalDashboardPage() {
       return;
     }
     
+    // 💡 画面の右上（セレクトボックス）で選択されている月を取得
+    const targetMonthStr = parseInt(globalSelectedMonth, 10).toString();
+
     const textToCopy = accidentMeasures
-      .filter(m => m.accident_no || m.url)
+      .filter(m => {
+        // 1. 事故NOかURLのどちらかが入力されているかチェック
+        const hasData = m.accident_no || m.url;
+        if (!hasData) return false;
+
+        // 2. 日付（start_date）の「月」が、選択中の月と一致しているかチェック
+        if (!m.start_date) return false;
+        const parts = m.start_date.split(/[-/]/); // / や - で分割
+        if (parts.length >= 2) {
+          const monthNum = parseInt(parts[1], 10).toString();
+          return monthNum === targetMonthStr;
+        }
+        return false;
+      })
       .map(m => `事故NO: ${m.accident_no || '未設定'}\nURL: ${m.url || '未設定'}`)
       .join('\n\n');
     
     if (!textToCopy) {
-      showToast('事故NOとURLが設定されているデータがありません', 'error');
+      showToast(`${globalSelectedMonth}月の申請用データがありません`, 'error');
       return;
     }
 
     navigator.clipboard.writeText(textToCopy).then(() => {
-      showToast('事故NOとURLをクリップボードにコピーしました！', 'success');
+      showToast(`${globalSelectedMonth}月の申請データをコピーしました！`, 'success');
     }).catch(err => {
       showToast('コピーに失敗しました', 'error');
     });
@@ -1904,14 +1888,7 @@ export default function UniversalDashboardPage() {
                       <div className="h-full w-full flex items-center justify-center text-slate-400 font-bold text-xs">グラフデータがありません</div>
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
-                        <RechartsLineChart 
-          data={accidentCategoryTrendData.chartData.map((month: any) => {
-            const clean = { ...month };
-            accidentCategoryTrendData.categories.forEach(cat => { if (clean[cat] === undefined) clean[cat] = 0; });
-            return clean;
-          })} 
-          margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-        >
+                        <RechartsLineChart data={accidentCategoryTrendData.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                           <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />
                           <YAxis stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />

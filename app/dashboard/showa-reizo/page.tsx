@@ -896,18 +896,34 @@ export default function UniversalDashboardPage() {
       return;
     }
     
+    // 💡 画面の右上（セレクトボックス）で選択されている月を取得
+    const targetMonthStr = parseInt(globalSelectedMonth, 10).toString();
+
     const textToCopy = accidentMeasures
-      .filter(m => m.accident_no || m.url)
+      .filter(m => {
+        // 1. 事故NOかURLのどちらかが入力されているかチェック
+        const hasData = m.accident_no || m.url;
+        if (!hasData) return false;
+
+        // 2. 日付（start_date）の「月」が、選択中の月と一致しているかチェック
+        if (!m.start_date) return false;
+        const parts = m.start_date.split(/[-/]/); // / や - で分割
+        if (parts.length >= 2) {
+          const monthNum = parseInt(parts[1], 10).toString();
+          return monthNum === targetMonthStr;
+        }
+        return false;
+      })
       .map(m => `事故NO: ${m.accident_no || '未設定'}\nURL: ${m.url || '未設定'}`)
       .join('\n\n');
     
     if (!textToCopy) {
-      showToast('事故NOとURLが設定されているデータがありません', 'error');
+      showToast(`${globalSelectedMonth}月の申請用データがありません`, 'error');
       return;
     }
 
     navigator.clipboard.writeText(textToCopy).then(() => {
-      showToast('事故NOとURLをクリップボードにコピーしました！', 'success');
+      showToast(`${globalSelectedMonth}月の申請データをコピーしました！`, 'success');
     }).catch(err => {
       showToast('コピーに失敗しました', 'error');
     });
