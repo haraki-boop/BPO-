@@ -538,177 +538,176 @@ export default function UniversalDashboardPage() {
     });
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
-  // 🌟【先月比計算＆「★ 合計」への名称短縮】（完全汎用化対応版・ハードコード排除）
-  const computedVaultProductivity = useMemo(() => {
-    if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
-    
-    const targetMonthStr = `/${prodSelectedMonth.padStart(2, '0')}/`;
-    
-    let prevM = parseInt(prodSelectedMonth, 10) - 1;
-    if (prevM <= 0) prevM += 12;
-    const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
+  // =========================================================
+// 起動用：日次月別の一括処理関数
+// =========================================================
+const computedVaultProductivity = useMemo(() => {
+  if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
+  
+  const targetMonthStr = `/${prodSelectedMonth.padStart(2, '0')}/`;
+  
+  let prevM = parseInt(prodSelectedMonth, 10) - 1;
+  if (prevM <= 0) prevM += 12;
+  const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
 
-    // 💡 マスター設定から動的取得（固有名詞のハードコードを完全排除）
-    const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
-    const mappingMap = data.masterSettings?.NAME_MAPPING || {};
-    
-    // 💡 DBには「NAME_MAPPING」で変換された後の名前で蓄積されているため、検索用の配列を動的生成
-    const mappedProcessNames = processNames.map((proc: string) => mappingMap[proc] || proc);
+  // 💡 マスター設定から動的取得（固有名詞のハードコードを完全排除）
+  const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
+  const mappingMap = data.masterSettings?.NAME_MAPPING || {};
+  
+  // 💡 DBには「NAME_MAPPING」で変換された後の名前で蓄積されているため、検索用の配列を動的生成
+  const mappedProcessNames = processNames.map((proc: string) => mappingMap[proc] || proc);
 
-    const getMonthSummary = (monthStr: string) => {
-        let vol = 0;
-        let hrs = 0;
+  const getMonthSummary = (monthStr: string) => {
+      let vol = 0;
+      let hrs = 0;
 
-        if (data.volumeAccumulatedData) {
-            data.volumeAccumulatedData.forEach((item: any) => {
-                const itemName = item.title.replace('蓄積実績_', '');
-                // 💡 変換後の名前でチェック（または未設定時は全て合算）
-                if (mappedProcessNames.includes(itemName) || mappedProcessNames.length === 0) {
-                    item.labels.forEach((date: string, idx: number) => {
-                        if (date.includes(monthStr)) vol += n(item.values[idx]);
-                    });
-                }
-            });
+      if (data.volumeAccumulatedData) {
+          data.volumeAccumulatedData.forEach((item: any) => {
+              const itemName = item.title.replace('蓄積実績_', '');
+              // 💡 変換前後のどちらの名前で入っていても漏れなく合算できるように防衛
+              const isMatch = processNames.includes(itemName) || mappedProcessNames.includes(itemName);
+              if (processNames.length === 0 || isMatch) {
+                  item.labels.forEach((date: string, idx: number) => {
+                      if (date.includes(monthStr)) vol += n(item.values[idx]);
+                  });
+              }
+          });
+      }
+      if (data.manhoursAccumulatedData) {
+          data.manhoursAccumulatedData.forEach((item: any) => {
+              // 🛑 センター全体の「工数」のみを抽出し、各部門の工数との二重合算を防群
+              if (item.title !== '蓄積実績_工数') return;
+              item.labels.forEach((date: string, idx: number) => {
+                  if (date.includes(monthStr)) hrs += n(item.values[idx]);
+              });
+          });
+      }
+      const prod = hrs > 0 ? vol / hrs : 0;
+      return { vol, hrs, prod };
+  };
+
+  const prevSummary = getMonthSummary(prevMonthStr);
+  const calcRatio = (curr: number, prev: number) => prev > 0 ? (curr / prev) * 100 : 0;
+
+  const vRows: any[] = [];
+  if (data.volumeAccumulatedData) {
+    data.volumeAccumulatedData.forEach((item: any) => {
+      const itemName = item.title.replace('蓄積実績_', '');
+      item.labels.forEach((date: string, idx: number) => {
+        if (date.includes(targetMonthStr)) {
+          vRows.push({ date: date, item: itemName, value: n(item.values[idx]) });
         }
-        if (data.manhoursAccumulatedData) {
-            data.manhoursAccumulatedData.forEach((item: any) => {
-                // 🛑 センター全体の「工数」のみを抽出し、各部門の工数との二重合算を防ぐ
-                if (item.title !== '蓄積実績_工数') return;
-                item.labels.forEach((date: string, idx: number) => {
-                    if (date.includes(monthStr)) hrs += n(item.values[idx]);
-                });
-            });
+      });
+    });
+  }
+
+  const hTotalRows: any[] = [];
+  if (data.manhoursAccumulatedData) {
+    data.manhoursAccumulatedData.forEach((item: any) => {
+      if (item.title !== '蓄積実績_工数') return;
+      item.labels.forEach((date: string, idx: number) => {
+        if (date.includes(targetMonthStr)) {
+          const existing = hTotalRows.find(h => h.date === date);
+          if (existing) {
+            existing.value += n(item.values[idx]);
+          } else {
+            hTotalRows.push({ date: date, value: n(item.values[idx]) });
+          }
         }
-        const prod = hrs > 0 ? vol / hrs : 0;
-        return { vol, hrs, prod };
-    };
-
-    const prevSummary = getMonthSummary(prevMonthStr);
-    const calcRatio = (curr: number, prev: number) => prev > 0 ? (curr / prev) * 100 : 0;
-
-    const vRows: any[] = [];
-    if (data.volumeAccumulatedData) {
-      data.volumeAccumulatedData.forEach((item: any) => {
-        const itemName = item.title.replace('蓄積実績_', '');
-        item.labels.forEach((date: string, idx: number) => {
-          if (date.includes(targetMonthStr)) {
-            vRows.push({ date: date, item: itemName, value: n(item.values[idx]) });
-          }
-        });
       });
-    }
+    });
+  }
 
-    const hTotalRows: any[] = [];
-    if (data.manhoursAccumulatedData) {
-      data.manhoursAccumulatedData.forEach((item: any) => {
-        // 🛑 センター全体の「工数」だけを拾う
-        if (item.title !== '蓄積実績_工数') return;
-        item.labels.forEach((date: string, idx: number) => {
-          if (date.includes(targetMonthStr)) {
-            const existing = hTotalRows.find(h => h.date === date);
-            if (existing) {
-              existing.value += n(item.values[idx]);
-            } else {
-              hTotalRows.push({ date: date, value: n(item.values[idx]) });
-            }
-          }
-        });
-      });
-    }
-
-    const pRows: any[] = [];
-    if (data.productivityAccumulatedData) {
-      data.productivityAccumulatedData.forEach((item: any) => {
-        const itemName = item.title.replace('蓄積実績_作業生産性_', '');
-        item.labels.forEach((date: string, idx: number) => {
-          if (date.includes(targetMonthStr)) {
-            pRows.push({ date: date, item: itemName, value: n(item.values[idx]) });
-          }
-        });
-      });
-    }
-    
-    const allDates = Array.from(new Set([
-      ...vRows.map((r: any) => r.date),
-      ...hTotalRows.map((r: any) => r.date),
-      ...pRows.map((r: any) => r.date)
-    ])).sort();
-    
-    let centerTotalVolume = 0;
-    let centerTotalHours = 0;
-    
-    // フェールセーフ: マスター設定が空の場合でも画面が壊れないように実績データから抽出
-    const fallbackProcessNames = processNames.length > 0 ? processNames : Array.from(new Set([...vRows.map((r: any) => r.item), ...pRows.map((r: any) => r.item)]));
-
-    const items = fallbackProcessNames.map((proc: string) => {
-      let procTotalVolume = 0;
-      let prodSum = 0;
-      let prodCount = 0;
-      
-      // 💡 画面の表示名は元の「proc」を使用し、検索用にはマッピング後の「prodName」を使用する
-      const prodName = mappingMap[proc] || proc;
-      
-      const dailyList = allDates.map(dt => {
-        // 💡 変換後の名前 (prodName) で検索
-        const vMob = vRows.find((r: any) => r.date === dt && r.item === prodName);
-        const vol = vMob ? vMob.value : 0;
-        
-        const pMob = pRows.find((r: any) => r.date === dt && r.item === prodName);
-        const prod = pMob ? pMob.value : 0;
-        
-        procTotalVolume += vol;
-        if (prod > 0) {
-            prodSum += prod;
-            prodCount++;
+  const pRows: any[] = [];
+  if (data.productivityAccumulatedData) {
+    data.productivityAccumulatedData.forEach((item: any) => {
+      const itemName = item.title.replace('蓄積実績_作業生産性_', '');
+      item.labels.forEach((date: string, idx: number) => {
+        if (date.includes(targetMonthStr)) {
+          pRows.push({ date: date, item: itemName, value: n(item.values[idx]) });
         }
-        
-        return { date: dt.split('/').slice(1).join('/'), volume: vol, hours: 0, prod: prod };
       });
-      
-      const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
-      centerTotalVolume += procTotalVolume;
+    });
+  }
+  
+  const allDates = Array.from(new Set([
+    ...vRows.map((r: any) => r.date),
+    ...hTotalRows.map((r: any) => r.date),
+    ...pRows.map((r: any) => r.date)
+  ])).sort();
+  
+  let centerTotalVolume = 0;
+  let centerTotalHours = 0;
+  
+  const fallbackProcessNames = processNames.length > 0 ? processNames : Array.from(new Set([...vRows.map((r: any) => r.item), ...pRows.map((r: any) => r.item)]));
 
-      return { process: proc, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
+  const items = fallbackProcessNames.map((proc: string) => {
+    let procTotalVolume = 0;
+    let prodSum = 0;
+    let prodCount = 0;
+    
+    const prodName = mappingMap[proc] || proc;
+    
+    const dailyList = allDates.map(dt => {
+      // 💡 🌟【重要】DB側にマッピング「前」の名前で残っているケースと「後」の名前のケース、どちらでも100%ヒットするように二重防衛
+      const vMob = vRows.find((r: any) => r.date === dt && (r.item === prodName || r.item === proc));
+      const vol = vMob ? vMob.value : 0;
+      
+      const pMob = pRows.find((r: any) => r.date === dt && (r.item === prodName || r.item === proc));
+      const prod = pMob ? pMob.value : 0;
+      
+      procTotalVolume += vol;
+      if (prod > 0) {
+          prodSum += prod;
+          prodCount++;
+      }
+      
+      return { date: dt.split('/').slice(1).join('/'), volume: vol, hours: 0, prod: prod };
     });
     
-    centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
-    
-    // フェールセーフ用のマップ名リスト
-    const activeMappedNames = mappedProcessNames.length > 0 ? mappedProcessNames : fallbackProcessNames;
+    const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
+    centerTotalVolume += procTotalVolume;
 
-    const centerDailyList = allDates.map(dt => {
-      // 💡 マッピング後の名称リストに合致する物量のみを全体合計として合算
-      const dayVol = vRows.filter((r: any) => r.date === dt && activeMappedNames.includes(r.item)).reduce((sum: number, r: any) => sum + r.value, 0);
-      const dayHrsRow = hTotalRows.find((r: any) => r.date === dt);
-      const dayHrs = dayHrsRow ? dayHrsRow.value : 0;
-      const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
-      return { date: dt.split('/').slice(1).join('/'), volume: dayVol, hours: dayHrs, prod: dayProd };
-    });
-    
-    const centerTotalProd = centerTotalHours > 0 ? centerTotalVolume / centerTotalHours : 0;
-    
-    items.unshift({
-      process: "★ 合計",
-      dailyList: centerDailyList,
-      totalVolume: centerTotalVolume,
-      totalHours: centerTotalHours,
-      totalProd: centerTotalProd
-    });
-    
-    return { 
-      items, 
-      summary: { 
-        totalVolume: centerTotalVolume, 
-        totalHours: centerTotalHours, 
-        totalProd: centerTotalProd,
-        lastMonthRatio: {
-            vol: calcRatio(centerTotalVolume, prevSummary.vol),
-            hrs: calcRatio(centerTotalHours, prevSummary.hrs),
-            prod: calcRatio(centerTotalProd, prevSummary.prod)
-        }
-      } 
-    };
-  }, [data, prodSelectedMonth]);
+    return { process: proc, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
+  });
+  
+  centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
+  
+  const activeMappedNames = mappedProcessNames.length > 0 ? mappedProcessNames : fallbackProcessNames;
+
+  const centerDailyList = allDates.map(dt => {
+    // 💡 合計計算時も、変換前後のどちらの名前が来ても漏れなく集計対象にする
+    const dayVol = vRows.filter((r: any) => r.date === dt && (activeMappedNames.includes(r.item) || fallbackProcessNames.includes(r.item))).reduce((sum: number, r: any) => sum + r.value, 0);
+    const dayHrsRow = hTotalRows.find((r: any) => r.date === dt);
+    const dayHrs = dayHrsRow ? dayHrsRow.value : 0;
+    const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
+    return { date: dt.split('/').slice(1).join('/'), volume: dayVol, hours: dayHrs, prod: dayProd };
+  });
+  
+  const centerTotalProd = centerTotalHours > 0 ? centerTotalVolume / centerTotalHours : 0;
+  
+  items.unshift({
+    process: "★ 合計",
+    dailyList: centerDailyList,
+    totalVolume: centerTotalVolume,
+    totalHours: centerTotalHours,
+    totalProd: centerTotalProd
+  });
+  
+  return { 
+    items, 
+    summary: { 
+      totalVolume: centerTotalVolume, 
+      totalHours: centerTotalHours, 
+      totalProd: centerTotalProd,
+      lastMonthRatio: {
+          vol: calcRatio(centerTotalVolume, prevSummary.vol),
+          hrs: calcRatio(centerTotalHours, prevSummary.hrs),
+          prod: calcRatio(centerTotalProd, prevSummary.prod)
+      }
+    } 
+  };
+}, [data, prodSelectedMonth]);
 
   // =========================================================
   // 🚨 事故管理ダッシュボード用の計算ロジック
