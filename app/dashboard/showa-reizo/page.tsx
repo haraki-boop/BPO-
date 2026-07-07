@@ -538,7 +538,7 @@ export default function UniversalDashboardPage() {
     });
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
-  // 🌟【先月比計算＆「★ 合計」への名称短縮】
+  // 🌟【先月比計算＆「★ 合計」への名称短縮】（完全汎用化対応版・ハードコード排除）
   const computedVaultProductivity = useMemo(() => {
     if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
     
@@ -548,15 +548,22 @@ export default function UniversalDashboardPage() {
     if (prevM <= 0) prevM += 12;
     const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
 
+    // 💡 マスター設定から動的取得（固有名詞のハードコードを完全排除）
+    const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
+    const mappingMap = data.masterSettings?.NAME_MAPPING || {};
+    
+    // 💡 DBには「NAME_MAPPING」で変換された後の名前で蓄積されているため、検索用の配列を動的生成
+    const mappedProcessNames = processNames.map((proc: string) => mappingMap[proc] || proc);
+
     const getMonthSummary = (monthStr: string) => {
         let vol = 0;
         let hrs = 0;
-        const processNames = data.masterSettings?.TARGET_CATEGORIES || ["リコス", "リコスアイス", "BB", "ユニー一括", "汎用"];
 
         if (data.volumeAccumulatedData) {
             data.volumeAccumulatedData.forEach((item: any) => {
                 const itemName = item.title.replace('蓄積実績_', '');
-                if (processNames.includes(itemName)) {
+                // 💡 変換後の名前でチェック（または未設定時は全て合算）
+                if (mappedProcessNames.includes(itemName) || mappedProcessNames.length === 0) {
                     item.labels.forEach((date: string, idx: number) => {
                         if (date.includes(monthStr)) vol += n(item.values[idx]);
                     });
@@ -565,6 +572,8 @@ export default function UniversalDashboardPage() {
         }
         if (data.manhoursAccumulatedData) {
             data.manhoursAccumulatedData.forEach((item: any) => {
+                // 🛑 センター全体の「工数」のみを抽出し、各部門の工数との二重合算を防ぐ
+                if (item.title !== '蓄積実績_工数') return;
                 item.labels.forEach((date: string, idx: number) => {
                     if (date.includes(monthStr)) hrs += n(item.values[idx]);
                 });
@@ -592,6 +601,8 @@ export default function UniversalDashboardPage() {
     const hTotalRows: any[] = [];
     if (data.manhoursAccumulatedData) {
       data.manhoursAccumulatedData.forEach((item: any) => {
+        // 🛑 センター全体の「工数」だけを拾う
+        if (item.title !== '蓄積実績_工数') return;
         item.labels.forEach((date: string, idx: number) => {
           if (date.includes(targetMonthStr)) {
             const existing = hTotalRows.find(h => h.date === date);
@@ -623,26 +634,23 @@ export default function UniversalDashboardPage() {
       ...pRows.map((r: any) => r.date)
     ])).sort();
     
-    const processNames = data.masterSettings?.TARGET_CATEGORIES || ["リコス", "リコスアイス", "BB", "ユニー一括", "汎用"];
-    
     let centerTotalVolume = 0;
     let centerTotalHours = 0;
     
-    const items = processNames.map((proc: string) => {
+    // フェールセーフ: マスター設定が空の場合でも画面が壊れないように実績データから抽出
+    const fallbackProcessNames = processNames.length > 0 ? processNames : Array.from(new Set([...vRows.map((r: any) => r.item), ...pRows.map((r: any) => r.item)]));
+
+    const items = fallbackProcessNames.map((proc: string) => {
       let procTotalVolume = 0;
       let prodSum = 0;
       let prodCount = 0;
       
-      let prodName = proc;
-      if (data.masterSettings?.NAME_MAPPING && data.masterSettings.NAME_MAPPING[proc]) {
-        prodName = data.masterSettings.NAME_MAPPING[proc];
-      } else {
-        if (proc === "ユニー一括") prodName = "ユニー";
-        if (proc === "BB") prodName = "ブロンコビリー";
-      }
+      // 💡 画面の表示名は元の「proc」を使用し、検索用にはマッピング後の「prodName」を使用する
+      const prodName = mappingMap[proc] || proc;
       
       const dailyList = allDates.map(dt => {
-        const vMob = vRows.find((r: any) => r.date === dt && r.item === proc);
+        // 💡 変換後の名前 (prodName) で検索
+        const vMob = vRows.find((r: any) => r.date === dt && r.item === prodName);
         const vol = vMob ? vMob.value : 0;
         
         const pMob = pRows.find((r: any) => r.date === dt && r.item === prodName);
@@ -665,8 +673,12 @@ export default function UniversalDashboardPage() {
     
     centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
     
+    // フェールセーフ用のマップ名リスト
+    const activeMappedNames = mappedProcessNames.length > 0 ? mappedProcessNames : fallbackProcessNames;
+
     const centerDailyList = allDates.map(dt => {
-      const dayVol = vRows.filter((r: any) => r.date === dt && processNames.includes(r.item)).reduce((sum: number, r: any) => sum + r.value, 0);
+      // 💡 マッピング後の名称リストに合致する物量のみを全体合計として合算
+      const dayVol = vRows.filter((r: any) => r.date === dt && activeMappedNames.includes(r.item)).reduce((sum: number, r: any) => sum + r.value, 0);
       const dayHrsRow = hTotalRows.find((r: any) => r.date === dt);
       const dayHrs = dayHrsRow ? dayHrsRow.value : 0;
       const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
@@ -676,7 +688,7 @@ export default function UniversalDashboardPage() {
     const centerTotalProd = centerTotalHours > 0 ? centerTotalVolume / centerTotalHours : 0;
     
     items.unshift({
-      process: "★ 合計", // 💡 左端カードのタイトル短縮
+      process: "★ 合計",
       dailyList: centerDailyList,
       totalVolume: centerTotalVolume,
       totalHours: centerTotalHours,
@@ -697,26 +709,6 @@ export default function UniversalDashboardPage() {
       } 
     };
   }, [data, prodSelectedMonth]);
-
-  const contractList = (() => {
-    if (!data || !data.contractYojitsuData) return [];
-    const cMap = new Map();
-    data.contractYojitsuData.forEach((item: any) => {
-      if (!item.title) return;
-      const isYosan = item.title.startsWith('予算_');
-      const isJisseki = item.title.startsWith('実績_');
-      const cleanTitle = item.title.replace('予算_', '').replace('実績_', '');
-      if (!cMap.has(cleanTitle)) {
-        cMap.set(cleanTitle, { title: cleanTitle, labels: item.labels || [], actual: new Array((item.labels || []).length).fill(0), forecast: new Array((item.labels || []).length).fill(0) });
-      }
-      const entry = cMap.get(cleanTitle);
-      if (isJisseki) entry.actual = item.values;
-      if (isYosan) entry.forecast = item.values;
-    });
-    let list = Array.from(cMap.values());
-    if (searchQuery) list = list.filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase()));
-    return list;
-  })();
 
   // =========================================================
   // 🚨 事故管理ダッシュボード用の計算ロジック
