@@ -304,11 +304,14 @@ export default function UniversalDashboardPage() {
   const baseLabelsFiltered = data ? (data.labels || []) : [];
   const currentMonthIndices = baseLabelsFiltered.map((_: any, idx: number) => idx);
 
+  // =========================================================
+  // 📊 請負予実データ処理（UIクラッシュ絶対に防ぐ防衛版）
+  // =========================================================
   const contractAvailableMonths = (() => {
-    if (!data || !data.contractYojitsuData || data.contractYojitsuData.length === 0) return [];
+    if (!data || !data.contractYojitsuData || !Array.isArray(data.contractYojitsuData)) return [];
     const sets = new Set<string>();
     data.contractYojitsuData.forEach((item: any) => {
-      if (item.labels) {
+      if (item && item.labels && Array.isArray(item.labels)) {
         item.labels.forEach((lbl: any) => { if (lbl) sets.add(String(lbl).replace('月', '')); });
       }
     });
@@ -317,6 +320,31 @@ export default function UniversalDashboardPage() {
         val : val + 12; };
       return getOrder(a) - getOrder(b);
     });
+  })();
+
+  const contractList = (() => {
+    if (!data || !data.contractYojitsuData || !Array.isArray(data.contractYojitsuData)) return [];
+    const cMap = new Map();
+    data.contractYojitsuData.forEach((item: any) => {
+      if (!item || !item.title) return;
+      const isYosan = item.title.startsWith('予算_');
+      const isJisseki = item.title.startsWith('実績_');
+      const cleanTitle = item.title.replace('予算_', '').replace('実績_', '');
+      if (!cMap.has(cleanTitle)) {
+        cMap.set(cleanTitle, { 
+          title: cleanTitle, 
+          labels: item.labels || [], 
+          actual: new Array((item.labels || []).length).fill(0), 
+          forecast: new Array((item.labels || []).length).fill(0) 
+        });
+      }
+      const entry = cMap.get(cleanTitle);
+      if (isJisseki) entry.actual = item.values || [];
+      if (isYosan) entry.forecast = item.values || [];
+    });
+    let list = Array.from(cMap.values());
+    if (searchQuery) list = list.filter(m => m.title && m.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    return list;
   })();
 
   const weeklyGroups = (() => {
