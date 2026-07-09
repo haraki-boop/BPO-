@@ -612,7 +612,7 @@ export default function UniversalDashboardPage() {
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
   // =========================================================
-  // 起動用：日次月別の一括処理関数 (生産性・物量)
+  // 起動用：日次月別の一括処理関数 (生産性・物量) ★完全汎用・複数合算(+)対応版
   // =========================================================
   const computedVaultProductivity = useMemo(() => {
     if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
@@ -624,14 +624,17 @@ export default function UniversalDashboardPage() {
 
     const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
     const mappingMap = data.masterSettings?.NAME_MAPPING || {};
-    const volumeMap = data.masterSettings?.VOLUME_MAPPING || {}; // 🌟 追加：物量マッピング
+    const volumeMap = data.masterSettings?.VOLUME_MAPPING || {};
     
     const mappedProcessNames = processNames.map((proc: string) => mappingMap[proc] || proc);
 
-    // 🌟 センター合計で物量を二重計上しないよう、ユニークな大元物量名のリストを作る
+    // 🌟 '+' で複数指定された物量名も分解してユニークリスト化（二重計上防止）
     const uniqueVolumeTargets = Array.from(new Set(
         processNames.length > 0 
-        ? processNames.map((proc: string) => volumeMap[proc] || mappingMap[proc] || proc) 
+        ? processNames.flatMap((proc: string) => {
+            const vStr = volumeMap[proc] || mappingMap[proc] || proc;
+            return vStr.split('+').map((s: string) => s.trim());
+          }) 
         : []
     ));
 
@@ -640,7 +643,6 @@ export default function UniversalDashboardPage() {
         if (data.volumeAccumulatedData) {
             data.volumeAccumulatedData.forEach((item: any) => {
                 const itemName = item.title.replace('蓄積実績_', '');
-                // 🌟 ユニークリストに含まれる物量だけを足す
                 if (processNames.length === 0 || uniqueVolumeTargets.includes(itemName)) {
                     item.labels.forEach((date: string, idx: number) => {
                         if (date.includes(monthStr)) vol += n(item.values[idx]);
@@ -710,11 +712,16 @@ export default function UniversalDashboardPage() {
       let procTotalVolume = 0; let prodSum = 0; let prodCount = 0;
       
       const prodName = mappingMap[proc] || proc;
-      const volName = volumeMap[proc] || mappingMap[proc] || proc; // 🌟 紐付けられた物量名を取得
+      const volNameStr = volumeMap[proc] || mappingMap[proc] || proc;
+      
+      // 🌟 '+' で分割して複数のターゲット配列にする
+      const volTargets = volNameStr.split('+').map((s: string) => s.trim());
       
       const dailyList = allDates.map(dt => {
-        const vMob = vRows.find((r: any) => r.date === dt && (r.item === volName || r.item === proc));
-        const vol = vMob ? vMob.value : 0;
+        // 🌟 複数指定された物量をすべて合算する
+        const vol = vRows
+            .filter((r: any) => r.date === dt && (volTargets.includes(r.item) || r.item === proc))
+            .reduce((sum: number, r: any) => sum + r.value, 0);
         
         const pMob = pRows.find((r: any) => r.date === dt && (r.item === prodName || r.item === proc));
         const prod = pMob ? pMob.value : 0;
@@ -726,12 +733,10 @@ export default function UniversalDashboardPage() {
       });
       
       const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
-      // 🌟 センター合計への合算はここでは行わない（二重計上防止）
 
       return { process: proc, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
     });
     
-    // 🌟 センター合計はユニークな物量名だけを足し合わせる
     centerTotalVolume = allDates.reduce((sum, dt) => {
         const dayVol = vRows.filter((r: any) => r.date === dt && (uniqueVolumeTargets.length > 0 ? uniqueVolumeTargets.includes(r.item) : true))
                             .reduce((dSum: number, r: any) => dSum + r.value, 0);
@@ -764,11 +769,7 @@ export default function UniversalDashboardPage() {
         totalVolume: centerTotalVolume, 
         totalHours: centerTotalHours, 
         totalProd: centerTotalProd,
-        lastMonthRatio: {
-            vol: calcRatio(centerTotalVolume, prevSummary.vol),
-            hrs: calcRatio(centerTotalHours, prevSummary.hrs),
-            prod: calcRatio(centerTotalProd, prevSummary.prod)
-        }
+        lastMonthRatio: { vol: calcRatio(centerTotalVolume, prevSummary.vol), hrs: calcRatio(centerTotalHours, prevSummary.hrs), prod: calcRatio(centerTotalProd, prevSummary.prod) }
       } 
     };
   }, [data, prodSelectedMonth]);
