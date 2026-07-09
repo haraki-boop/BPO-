@@ -55,7 +55,7 @@ export default function UniversalDashboardPage() {
   // 🏢 【拠点マスター設定】
   // =========================================================
   const LOCATION_ID = 'cainz-fukuoka'; 
-  const LOCATION_NAME = 'カインズ福岡'; 
+  const LOCATION_NAME = 'カインズ福岡センター'; 
   
   const GAS_URL = `/api/gas?location=${LOCATION_ID}`;
   const [isMounted, setIsMounted] = useState(false);
@@ -118,7 +118,7 @@ export default function UniversalDashboardPage() {
     if (!title) return Math.round(val).toLocaleString();
     if (title.includes("%") || title.includes("率")) return `${val.toFixed(1)}%`;
     if (title.includes("生産性") || /時給|最低賃金|人数|在籍者|違反者/.test(title)) return Number(val.toFixed(1)).toLocaleString();
-    if (/売上|原価|費|利益|金額|単価/.test(title)) return `¥${Math.round(val).toLocaleString()}`;
+    if (/売上|原価|費|利益|金額|単価|通過/.test(title)) return `¥${Math.round(val).toLocaleString()}`;
     return Math.round(val).toLocaleString();
   };
 
@@ -618,25 +618,30 @@ export default function UniversalDashboardPage() {
     if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
     
     const targetMonthStr = `/${prodSelectedMonth.padStart(2, '0')}/`;
-    
     let prevM = parseInt(prodSelectedMonth, 10) - 1;
     if (prevM <= 0) prevM += 12;
     const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
 
     const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
     const mappingMap = data.masterSettings?.NAME_MAPPING || {};
+    const volumeMap = data.masterSettings?.VOLUME_MAPPING || {}; // 🌟 追加：物量マッピング
     
     const mappedProcessNames = processNames.map((proc: string) => mappingMap[proc] || proc);
 
-    const getMonthSummary = (monthStr: string) => {
-        let vol = 0;
-        let hrs = 0;
+    // 🌟 センター合計で物量を二重計上しないよう、ユニークな大元物量名のリストを作る
+    const uniqueVolumeTargets = Array.from(new Set(
+        processNames.length > 0 
+        ? processNames.map((proc: string) => volumeMap[proc] || mappingMap[proc] || proc) 
+        : []
+    ));
 
+    const getMonthSummary = (monthStr: string) => {
+        let vol = 0; let hrs = 0;
         if (data.volumeAccumulatedData) {
             data.volumeAccumulatedData.forEach((item: any) => {
                 const itemName = item.title.replace('蓄積実績_', '');
-                const isMatch = processNames.includes(itemName) || mappedProcessNames.includes(itemName);
-                if (processNames.length === 0 || isMatch) {
+                // 🌟 ユニークリストに含まれる物量だけを足す
+                if (processNames.length === 0 || uniqueVolumeTargets.includes(itemName)) {
                     item.labels.forEach((date: string, idx: number) => {
                         if (date.includes(monthStr)) vol += n(item.values[idx]);
                     });
@@ -677,11 +682,8 @@ export default function UniversalDashboardPage() {
         item.labels.forEach((date: string, idx: number) => {
           if (date.includes(targetMonthStr)) {
             const existing = hTotalRows.find(h => h.date === date);
-            if (existing) {
-              existing.value += n(item.values[idx]);
-            } else {
-              hTotalRows.push({ date: date, value: n(item.values[idx]) });
-            }
+            if (existing) existing.value += n(item.values[idx]);
+            else hTotalRows.push({ date: date, value: n(item.values[idx]) });
           }
         });
       });
@@ -699,52 +701,47 @@ export default function UniversalDashboardPage() {
       });
     }
     
-    const allDates = Array.from(new Set([
-      ...vRows.map((r: any) => r.date),
-      ...hTotalRows.map((r: any) => r.date),
-      ...pRows.map((r: any) => r.date)
-    ])).sort();
+    const allDates = Array.from(new Set([...vRows.map((r: any) => r.date), ...hTotalRows.map((r: any) => r.date), ...pRows.map((r: any) => r.date)])).sort();
     
-    let centerTotalVolume = 0;
-    let centerTotalHours = 0;
-    
+    let centerTotalVolume = 0; let centerTotalHours = 0;
     const fallbackProcessNames = processNames.length > 0 ? processNames : Array.from(new Set([...vRows.map((r: any) => r.item), ...pRows.map((r: any) => r.item)]));
 
     const items = fallbackProcessNames.map((proc: string) => {
-      let procTotalVolume = 0;
-      let prodSum = 0;
-      let prodCount = 0;
+      let procTotalVolume = 0; let prodSum = 0; let prodCount = 0;
       
       const prodName = mappingMap[proc] || proc;
+      const volName = volumeMap[proc] || mappingMap[proc] || proc; // 🌟 紐付けられた物量名を取得
       
       const dailyList = allDates.map(dt => {
-        const vMob = vRows.find((r: any) => r.date === dt && (r.item === prodName || r.item === proc));
+        const vMob = vRows.find((r: any) => r.date === dt && (r.item === volName || r.item === proc));
         const vol = vMob ? vMob.value : 0;
         
         const pMob = pRows.find((r: any) => r.date === dt && (r.item === prodName || r.item === proc));
         const prod = pMob ? pMob.value : 0;
         
         procTotalVolume += vol;
-        if (prod > 0) {
-            prodSum += prod;
-            prodCount++;
-        }
+        if (prod > 0) { prodSum += prod; prodCount++; }
         
         return { date: dt.split('/').slice(1).join('/'), volume: vol, hours: 0, prod: prod };
       });
       
       const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
-      centerTotalVolume += procTotalVolume;
+      // 🌟 センター合計への合算はここでは行わない（二重計上防止）
 
       return { process: proc, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
     });
     
+    // 🌟 センター合計はユニークな物量名だけを足し合わせる
+    centerTotalVolume = allDates.reduce((sum, dt) => {
+        const dayVol = vRows.filter((r: any) => r.date === dt && (uniqueVolumeTargets.length > 0 ? uniqueVolumeTargets.includes(r.item) : true))
+                            .reduce((dSum: number, r: any) => dSum + r.value, 0);
+        return sum + dayVol;
+    }, 0);
     centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
     
-    const activeMappedNames = mappedProcessNames.length > 0 ? mappedProcessNames : fallbackProcessNames;
-
     const centerDailyList = allDates.map(dt => {
-      const dayVol = vRows.filter((r: any) => r.date === dt && (activeMappedNames.includes(r.item) || fallbackProcessNames.includes(r.item))).reduce((sum: number, r: any) => sum + r.value, 0);
+      const dayVol = vRows.filter((r: any) => r.date === dt && (uniqueVolumeTargets.length > 0 ? uniqueVolumeTargets.includes(r.item) : fallbackProcessNames.includes(r.item)))
+                          .reduce((sum: number, r: any) => sum + r.value, 0);
       const dayHrsRow = hTotalRows.find((r: any) => r.date === dt);
       const dayHrs = dayHrsRow ? dayHrsRow.value : 0;
       const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
