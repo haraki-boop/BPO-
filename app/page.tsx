@@ -2,7 +2,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { MapPin, Navigation, ChevronRight, DoorOpen, AlertTriangle, Wind, Thermometer, CloudRain, Loader2 } from 'lucide-react';
+import { MapPin, Navigation, ChevronRight, DoorOpen, AlertTriangle, Wind, Thermometer, CloudRain, Loader2, Bot, MessageCircle } from 'lucide-react';
 
 // 💡 WMO（世界気象機関）の天気コードを人間用に変換し、アラート基準を判定する関数
 const getWeatherInfo = (code: number) => {
@@ -46,20 +46,49 @@ export default function MapPortalPage() {
   const markersRef = useRef<{ [key: string]: any }>({});
   const layersRef = useRef<any>({ light: null, dark: null, emergencyGroup: null });
 
-  // 📍 拠点リストの定義
+  // 📍 拠点リストの定義（AIアシスタントのURLを追加）
   const locations = [
-    { id: 'showa-reizo', name: '昭和冷蔵', address: '神奈川県厚木市', lat: 35.4430, lng: 139.3640, type: 'hub', desc: '' },
-    { id: 'afs-minamikanto', name: 'AFS南関東センター', address: '千葉県船橋市高瀬町24番12号', lat: 35.6717, lng: 139.9924, type: 'center', desc: '' },
-    { id: 'craft-delica', name: 'クラフトデリカ', address: '千葉県船橋市高瀬町24-6', lat: 35.6715, lng: 139.9930, type: 'center', desc: '' },
-    { id: 'landport-narashino', name: 'ランドポート習志野', address: '千葉県習志野市茜浜3丁目7-2', lat: 35.6586, lng: 139.9920, type: 'center', desc: '' },
-    { id: 'tokyu-store', name: '東急ストア 流通センター', address: '神奈川県川崎市川崎区東扇島23-4', lat: 35.4998, lng: 139.7702, type: 'center', desc: '' },
-    { id: 'afs-bisai', name: 'AFS尾西_流通', address: '愛知県一宮市明地南茱之木25-1', lat: 35.2869, lng: 136.7391, type: 'center', desc: '' },
-    { id: 'yamanaka-shionagi', name: 'ヤマナカ しおなぎ生鮮センター', address: '愛知県名古屋市港区潮凪町1-3', lat: 35.0797, lng: 136.8618, type: 'center', desc: '' },
-    { id: 'mitsui-chubu', name: '三井食品 中部物流センター', address: '愛知県名古屋市緑区高根山2丁目108', lat: 35.0461, lng: 136.9485, type: 'center', desc: '' },
-    { id: 'oie-hannan', name: '尾家産業 阪南支店', address: '大阪府貝塚市二色中町5-1', lat: 34.454641, lng: 135.344908, type: 'center', desc: '' },
-    { id: 'medi-entrance', name: 'メディエントランス', address: '大阪府箕面市森町西2丁目4-1', lat: 34.885, lng: 135.443, type: 'center', desc: '' },
-    { id: 'cainz-kobe', name: 'カインズ 神戸流通センター', address: '兵庫県神戸市須磨区弥栄台', lat: 34.6860, lng: 135.0750, type: 'center', desc: '' },
-    { id: 'cainz-fukuoka', name: 'カインズ 福岡流通センター', address: '福岡県糟屋郡久山町久原2940', lat: 33.6420, lng: 130.5050, type: 'center', desc: '' },
+    { id: 'showa-reizo', name: '昭和冷蔵', address: '神奈川県厚木市', lat: 35.4430, lng: 139.3640, type: 'hub', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/4b1f7092-ebd6-4984-ac18-4ab97b29ba76',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/07f314ce-cc45-45b4-9453-bc15fdf2314c' },
+    { id: 'afs-minamikanto', name: 'AFS南関東センター', address: '千葉県船橋市高瀬町24番12号', lat: 35.6717, lng: 139.9924, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/2fb5edba-e288-4d90-9fa6-c416442bab73',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/e06a5a44-db1a-41ac-a16f-db0d0823a4bc' },
+    { id: 'craft-delica', name: 'クラフトデリカ', address: '千葉県船橋市高瀬町24-6', lat: 35.6715, lng: 139.9930, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/73807b18-47ed-4191-a90c-07d50b5b4f83',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/2e056f93-d3bf-4e1d-8f8b-664132036252' },
+    
+    // 👇 ランドポート習志野：AIコンシェルジュにダミーURL ('#') を追加
+    { id: 'landport-narashino', name: 'ランドポート習志野', address: '千葉県習志野市茜浜3丁目7-2', lat: 35.6586, lng: 139.9920, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/943f2704-4c7b-41dc-b307-b9571adfc448',
+      aiConciergeUrl: '#' },
+    
+    // 👇 東急ストア：AIセンター長にダミーURL ('#') を追加
+    { id: 'tokyu-store', name: '東急ストア 流通センター', address: '神奈川県川崎市川崎区東扇島23-4', lat: 35.4998, lng: 139.7702, type: 'center', desc: '',
+      aiManagerUrl: '#',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/df86f541-6ddf-4a6a-87bf-a374d7d5ce84' },
+      
+    { id: 'afs-bisai', name: 'AFS尾西_流通', address: '愛知県一宮市明地南茱之木25-1', lat: 35.2869, lng: 136.7391, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/8e2c7e81-16e7-4aa5-a7a9-ce44c83db68a',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/1964f2d6-7663-4cb6-982b-65e9a462408d' },
+    { id: 'yamanaka-shionagi', name: 'ヤマナカ しおなぎ生鮮センター', address: '愛知県名古屋市港区潮凪町1-3', lat: 35.0797, lng: 136.8618, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/0db774bd-abcc-49db-88a2-2faa506d4895',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/7c5f28b1-e601-48ab-80ad-551a2efc8f38' },
+    { id: 'mitsui-chubu', name: '三井食品 中部物流センター', address: '愛知県名古屋市緑区高根山2丁目108', lat: 35.0461, lng: 136.9485, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/3dcab155-2717-4255-b047-9073b74f6345',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/f39a5d98-27e9-4e9c-a3f0-5340c57748fb' },
+    { id: 'oie-hannan', name: '尾家産業 阪南支店', address: '大阪府貝塚市二色中町5-1', lat: 34.454641, lng: 135.344908, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/efa68d30-337b-4787-8e79-73e017dc64bd',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/d52ab5bb-68fc-4d40-96af-6c31165239d2' },
+    { id: 'medi-entrance', name: 'メディエントランス', address: '大阪府箕面市森町西2丁目4-1', lat: 34.885, lng: 135.443, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/8ba4dddf-60b2-4460-9a69-e80f4aa3452f',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/acdbc2e1-951b-4351-ba10-575d6903fe05' },
+    { id: 'cainz-kobe', name: 'カインズ 神戸流通センター', address: '兵庫県神戸市須磨区弥栄台', lat: 34.6860, lng: 135.0750, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/1599f84d-3251-496d-9081-69931f77e0de',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/18c3a4a6-a066-4e21-8468-97cb0c7d88f1' },
+    { id: 'cainz-fukuoka', name: 'カインズ 福岡流通センター', address: '福岡県糟屋郡久山町久原2940', lat: 33.6420, lng: 130.5050, type: 'center', desc: '',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/f3932ccb-a57a-4ec0-a628-25d04bb385d1',
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/7b8954b7-5078-4796-964e-15727c89c7a0' },
     { id: 'afs-bisai-seiso', name: 'AFS尾西_清掃', address: '愛知県一宮市明地南茱之木25-1', lat: 35.286934, lng: 136.739061, type: 'center', desc: '', isPink: true },
     { id: 'himeji-afs-seiso', name: '兵庫姫路_AFS_清掃', address: '兵庫県姫路市白浜町甲841-51', lat: 34.778469, lng: 134.703810, type: 'center', desc: '', isPink: true },
     { id: 'mandai-saito', name: '万代彩都', address: '大阪府茨木市彩都あかね3-1', lat: 34.861370, lng: 135.534495, type: 'center', desc: '万代 彩都物流センター', isPink: true },
@@ -78,7 +107,7 @@ export default function MapPortalPage() {
         const data = await res.json();
         
         const newWeather: any = {};
-        let systemHasAlert = false; // 🚨 全拠点の中で1つでも警報級があるか？
+        let systemHasAlert = false;
 
         if (Array.isArray(data)) {
           data.forEach((d, i) => {
@@ -86,7 +115,6 @@ export default function MapPortalPage() {
             const windspeed = d.current_weather.windspeed;
             const temp = d.current_weather.temperature;
             
-            // 天候コードがアラート対象、または風速が25km/h以上なら危険判定
             const isAlert = getWeatherInfo(code).alert || windspeed >= 25;
             if (isAlert) {
               systemHasAlert = true;
@@ -97,7 +125,6 @@ export default function MapPortalPage() {
         }
         setWeatherData(newWeather);
 
-        // 🤖 【完全自動化】危険を察知したら、システムが自動で緊急モードをONにする！
         if (systemHasAlert) {
           setIsEmergencyMode(true);
         }
@@ -165,7 +192,6 @@ export default function MapPortalPage() {
     }
   }, [map]);
 
-  // 📡 モード切替とリアルタイムデータの反映（赤いレーダーの動的生成）
   useEffect(() => {
     if (!map || !window.L || isFetchingWeather) return;
     const L = window.L;
@@ -179,12 +205,10 @@ export default function MapPortalPage() {
 
       locations.forEach(loc => {
         const w = weatherData[loc.id];
-        // ⚠️ 現実の天候からアラートを判定
         const isAlert = w ? (getWeatherInfo(w.code).alert || w.windspeed >= 25) : false;
 
         if (isAlert) {
           markersRef.current[loc.id].setIcon(getEmergencyIcon(L));
-          // 🚨 現実に悪天候の拠点の上にだけ、赤いレーダーを被せる！
           L.circle([loc.lat, loc.lng], {
             color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.2, radius: 25000, className: 'radar-pulse-anim'
           }).addTo(layersRef.current.emergencyGroup);
@@ -217,16 +241,13 @@ export default function MapPortalPage() {
   return (
     <div className={`h-[100dvh] w-screen flex flex-col md:flex-row overflow-hidden font-sans transition-colors duration-500 ${isEmergencyMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       
-      {/* 🌪️ 各種ピンの色変え＆台風レーダーの脈動アニメーションCSS */}
       <style dangerouslySetInnerHTML={{__html: `
         .pink-map-pin { filter: hue-rotate(140deg) saturate(200%) brightness(110%); }
         .light-green-map-pin { filter: hue-rotate(-120deg) saturate(200%) brightness(120%); }
         .purple-map-pin { filter: hue-rotate(70deg) saturate(200%) brightness(110%); }
-
-        /* 🚨 緊急用・赤色ピンのCSSフィルター */
+        
         .red-emergency-pin { filter: hue-rotate(180deg) saturate(300%) brightness(90%); }
 
-        /* 地図上の巨大レーダーを脈打たせるアニメーション */
         @keyframes radarPulse {
           0% { stroke-width: 1; fill-opacity: 0.1; }
           50% { stroke-width: 3; fill-opacity: 0.35; }
@@ -237,7 +258,6 @@ export default function MapPortalPage() {
         }
       `}} />
 
-      {/* サイドバーエリア */}
       <div className={`w-full md:w-[400px] h-[40vh] md:h-full border-b md:border-b-0 md:border-r flex flex-col justify-between z-20 shadow-lg shrink-0 transition-colors duration-500 ${isEmergencyMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto flex-1">
           <div className={`border-b pb-3 md:pb-4 ${isEmergencyMode ? 'border-slate-800' : 'border-slate-100'}`}>
@@ -252,7 +272,6 @@ export default function MapPortalPage() {
             </p>
           </div>
 
-          {/* 🚨 イレギュラースイッチ（緊急災害モードトグル） */}
           <div className={`p-3 md:p-4 rounded-2xl border flex items-center justify-between transition-all ${isEmergencyMode ? 'bg-rose-950/40 border-rose-800 text-rose-200 shadow-[0_0_15px_rgba(239,68,68,0.1)]' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
             <div className="flex items-center gap-2">
               <AlertTriangle className={`w-4 h-4 ${isEmergencyMode ? 'text-rose-500 animate-bounce' : 'text-slate-400'}`} />
@@ -361,11 +380,9 @@ export default function MapPortalPage() {
         </div>
       </div>
 
-      {/* 地図エリア */}
       <div className="flex-1 w-full h-[60vh] md:h-full bg-slate-100 relative overflow-hidden">
         <div id="leaflet-map-container" className="w-full h-full z-10"></div>
 
-        {/* 拠点ポップアップ */}
         {selectedLocation && (() => {
           const w = weatherData[selectedLocation.id];
           const wInfo = w ? getWeatherInfo(w.code) : null;
@@ -432,6 +449,53 @@ export default function MapPortalPage() {
                   <span>{selectedLocation.address}</span>
                 </div>
               </div>
+
+              {/* AIアシスタントエリア（データが存在する場合のみ表示） */}
+              {(selectedLocation.aiManagerUrl || selectedLocation.aiConciergeUrl) && (
+                <div className={`flex gap-2 w-full pt-3 mt-3 border-t ${isEmergencyMode ? 'border-slate-800' : 'border-slate-100'}`}>
+                  {selectedLocation.aiManagerUrl && (
+                    <a 
+                      href={selectedLocation.aiManagerUrl} 
+                      target={selectedLocation.aiManagerUrl === '#' ? undefined : "_blank"}
+                      rel={selectedLocation.aiManagerUrl === '#' ? undefined : "noopener noreferrer"}
+                      onClick={(e) => {
+                        if (selectedLocation.aiManagerUrl === '#') {
+                          e.preventDefault();
+                          alert('AIセンター長は現在準備中です。');
+                        }
+                      }}
+                      className={`flex-1 rounded-lg py-2.5 text-[10px] font-black tracking-wider flex items-center justify-center gap-1.5 transition-colors border ${
+                        isEmergencyMode 
+                          ? 'bg-indigo-900/30 text-indigo-300 border-indigo-800 hover:bg-indigo-900/50' 
+                          : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100'
+                      }`}
+                    >
+                      <Bot size={13} /> AIセンター長
+                    </a>
+                  )}
+
+                  {selectedLocation.aiConciergeUrl && (
+                    <a 
+                      href={selectedLocation.aiConciergeUrl} 
+                      target={selectedLocation.aiConciergeUrl === '#' ? undefined : "_blank"}
+                      rel={selectedLocation.aiConciergeUrl === '#' ? undefined : "noopener noreferrer"}
+                      onClick={(e) => {
+                        if (selectedLocation.aiConciergeUrl === '#') {
+                          e.preventDefault();
+                          alert('AIコンシェルジュは現在準備中です。');
+                        }
+                      }}
+                      className={`flex-1 rounded-lg py-2.5 text-[10px] font-black tracking-wider flex items-center justify-center gap-1.5 transition-colors border ${
+                        isEmergencyMode 
+                          ? 'bg-emerald-900/30 text-emerald-300 border-emerald-800 hover:bg-emerald-900/50' 
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'
+                      }`}
+                    >
+                      <MessageCircle size={13} /> AIコンシェルジュ
+                    </a>
+                  )}
+                </div>
+              )}
 
               <Link
                 href={selectedLocation.customUrl || `/dashboard/${selectedLocation.id}`}
