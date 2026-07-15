@@ -63,9 +63,9 @@ export default function MapPortalPage() {
     { id: 'afs-bisai-seiso', name: 'AFS尾西_清掃', address: '愛知県一宮市明地南茱之木25-1', lat: 35.286934, lng: 136.739061, type: 'center', desc: '', isPink: true },
     { id: 'himeji-afs-seiso', name: '兵庫姫路_AFS_清掃', address: '兵庫県姫路市白浜町甲841-51', lat: 34.778469, lng: 134.703810, type: 'center', desc: '', isPink: true },
     { id: 'mandai-saito', name: '万代彩都', address: '大阪府茨木市彩都あかね3-1', lat: 34.861370, lng: 135.534495, type: 'center', desc: '万代 彩都物流センター', isPink: true },
-    // 🆕 万代渋川を万代彩都の下に追加
     { id: 'mandai-sibukawa', name: '万代渋川', address: '大阪府東大阪市渋川町3丁目12-25', lat: 34.644177, lng: 135.561439, type: 'center', desc: '', isPink: true },
-    { id: 'dts-division', name: 'DTS事業部', address: '千葉県船橋市高瀬町24番12号', lat: 35.6717, lng: 139.9924, type: 'center', desc: '', isLightGreen: true }
+    { id: 'dts-division', name: 'DTS事業部', address: '千葉県船橋市高瀬町24番12号', lat: 35.6717, lng: 139.9924, type: 'center', desc: '', isLightGreen: true },
+    { id: 'hr-solution', name: '人材ソリューション', address: '大阪府大阪市中央区', lat: 34.676527, lng: 135.497279, type: 'center', desc: '', isPurple: true, customUrl: 'https://app-eight-taupe-96.vercel.app/' }
   ];
 
   // 📡 Open-Meteo APIからリアルタイム気象データを取得 ＆ 完全自動化ロジック
@@ -115,6 +115,7 @@ export default function MapPortalPage() {
     let className = '';
     if (loc.isPink) className = 'pink-map-pin';
     if (loc.isLightGreen) className = 'light-green-map-pin';
+    if (loc.isPurple) className = 'purple-map-pin';
     return new L.Icon({
       iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
       shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
@@ -220,7 +221,8 @@ export default function MapPortalPage() {
       <style dangerouslySetInnerHTML={{__html: `
         .pink-map-pin { filter: hue-rotate(140deg) saturate(200%) brightness(110%); }
         .light-green-map-pin { filter: hue-rotate(-120deg) saturate(200%) brightness(120%); }
-        
+        .purple-map-pin { filter: hue-rotate(70deg) saturate(200%) brightness(110%); }
+
         /* 🚨 緊急用・赤色ピンのCSSフィルター */
         .red-emergency-pin { filter: hue-rotate(180deg) saturate(300%) brightness(90%); }
 
@@ -424,7 +426,7 @@ export default function MapPortalPage() {
                     style={{ 
                       color: showEmergencyUI
                         ? '#ef4444'
-                        : (selectedLocation.isPink ? '#ec4899' : (selectedLocation.isLightGreen ? '#84cc16' : '#3b82f6')) 
+                        : (selectedLocation.isPink ? '#ec4899' : (selectedLocation.isLightGreen ? '#84cc16' : (selectedLocation.isPurple ? '#a855f7' : '#3b82f6'))) 
                     }} 
                   /> 
                   <span>{selectedLocation.address}</span>
@@ -432,7 +434,9 @@ export default function MapPortalPage() {
               </div>
 
               <Link
-                href={`/dashboard/${selectedLocation.id}`}
+                href={selectedLocation.customUrl || `/dashboard/${selectedLocation.id}`}
+                target={selectedLocation.customUrl ? "_blank" : undefined}
+                rel={selectedLocation.customUrl ? "noopener noreferrer" : undefined}
                 className={`w-full py-3 md:py-3.5 rounded-xl text-xs font-black tracking-widest text-center shadow-md transition-all flex items-center justify-center gap-1 uppercase no-underline border-t ${showEmergencyUI ? 'bg-rose-600 hover:bg-rose-500 text-white border-white/10' : 'bg-slate-900 hover:bg-slate-800 text-white border-white/10'}`}
               >
                 ダッシュボードを開く <ChevronRight size={13} />
