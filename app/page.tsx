@@ -48,7 +48,7 @@ export default function MapPortalPage() {
 
   // 📍 拠点リストの定義（AIアシスタントのURLを追加）
   const locations = [
-    { id: 'showa-reizo', name: '昭和冷蔵', address: '神奈川県厚木市', lat: 35.4430, lng: 139.3640, type: 'hub', desc: '',
+    { id: 'showa-reizo', name: '昭和冷蔵 厚木配送センター', address: '神奈川県厚木市', lat: 35.517879, lng: 139.354149, type: 'hub', desc: '',
       aiManagerUrl: 'https://notebooklm.google.com/notebook/4b1f7092-ebd6-4984-ac18-4ab97b29ba76',
       aiConciergeUrl: 'https://notebooklm.google.com/notebook/07f314ce-cc45-45b4-9453-bc15fdf2314c' },
     { id: 'afs-minamikanto', name: 'AFS南関東センター', address: '千葉県船橋市高瀬町24番12号', lat: 35.6717, lng: 139.9924, type: 'center', desc: '',
