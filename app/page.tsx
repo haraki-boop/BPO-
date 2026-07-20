@@ -61,11 +61,11 @@ export default function MapPortalPage() {
     // 👇 ランドポート習志野：AIコンシェルジュにダミーURL ('#') を追加
     { id: 'landport-narashino', name: 'ランドポート習志野', address: '千葉県習志野市茜浜3丁目7-2', lat: 35.6586, lng: 139.9920, type: 'center', desc: '',
       aiManagerUrl: 'https://notebooklm.google.com/notebook/943f2704-4c7b-41dc-b307-b9571adfc448',
-      aiConciergeUrl: '#' },
+      aiConciergeUrl: 'https://notebooklm.google.com/notebook/4b08cd60-8c19-41d2-8bed-83a10b859210' },
     
     // 👇 東急ストア：AIセンター長にダミーURL ('#') を追加
     { id: 'tokyu-store', name: '東急ストア 流通センター', address: '神奈川県川崎市川崎区東扇島23-4', lat: 35.4998, lng: 139.7702, type: 'center', desc: '',
-      aiManagerUrl: '#',
+      aiManagerUrl: 'https://notebooklm.google.com/notebook/57799d00-1450-4685-a2dd-37b4e6697f13',
       aiConciergeUrl: 'https://notebooklm.google.com/notebook/df86f541-6ddf-4a6a-87bf-a374d7d5ce84' },
       
     { id: 'afs-bisai', name: 'AFS尾西_流通', address: '愛知県一宮市明地南茱之木25-1', lat: 35.2869, lng: 136.7391, type: 'center', desc: '',
