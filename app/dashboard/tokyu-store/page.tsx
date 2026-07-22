@@ -432,16 +432,11 @@ export default function UniversalDashboardPage() {
     });
 
     let result = Array.from(combinedMap.values()).map(m => {
-        // 🌟 売上進捗タブ ✕ 週次モード のときは強制的に「予測」データを適用する
-        if (activeTab === 'sales' && displayMode === 'weekly') {
+        // 🌟 売上進捗タブ ✕ 週次・月次モードのときは、どちらも強制的に「予測」の線を引く
+        if (activeTab === 'sales' && (displayMode === 'weekly' || displayMode === 'monthly')) {
             if (m.forecast_yosoku && m.forecast_yosoku.some((v: number) => n(v) > 0)) {
                 m.forecast = m.forecast_yosoku;
                 m.forecastType = '予測';
-            }
-        } else if (activeTab === 'sales' && displayMode === 'monthly') {
-            if (m.forecast_yosan && m.forecast_yosan.some((v: number) => n(v) > 0)) {
-                m.forecast = m.forecast_yosan;
-                m.forecastType = '予算';
             }
         }
         return m;
