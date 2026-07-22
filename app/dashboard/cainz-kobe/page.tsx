@@ -61,7 +61,7 @@ export default function UniversalDashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [data, setData] = useState<any>(null);
 
-  // タブ管理・表示モード管理
+ // タブ管理・表示モード管理
   const [activeTab, setActiveTab] = useState('sales');
   const [activeMonthlyTab, setActiveMonthlyTab] = useState<'salesConfirmed' | 'productivity'>('salesConfirmed');
   const [activeActionTab, setActiveActionTab] = useState<'dx' | 'env' | 'history'>('dx');
@@ -432,8 +432,8 @@ export default function UniversalDashboardPage() {
     });
 
     let result = Array.from(combinedMap.values()).map(m => {
-        // 🌟 売上進捗タブの「売上」は週次・月次モードのとき「予測」を目標ラインとしてセットする
-        if (activeTab === 'sales' && m.title.includes('売上') && (displayMode === 'weekly' || displayMode === 'monthly')) {
+        // 🌟 週次・月次モードのときは全指標で「予測」を目標ラインとしてセットする
+        if (displayMode === 'weekly' || displayMode === 'monthly') {
             if (m.forecast_yosoku && m.forecast_yosoku.some((v: number) => n(v) > 0)) {
                 m.forecast = m.forecast_yosoku;
                 m.forecastType = '予測';
@@ -509,6 +509,8 @@ export default function UniversalDashboardPage() {
 
         let pureActSum = 0; let pureFctSum = 0;
         let totalYosoku = 0; // 🌟 予測合計用
+        let totalYosan = 0;  // 🌟 予算合計用
+        let validYosanDays = 0;
 
         currentMonthIndices.forEach(idx => {
           let actVal = 0; let fctVal = 0; let lastAct = 0; let prevYearAct = 0; let yosokuVal = 0; let yosanVal = 0;
@@ -533,8 +535,10 @@ export default function UniversalDashboardPage() {
           pureActSum += actVal;
           pureFctSum += fctVal;
           totalYosoku += yosokuVal;
+          totalYosan += yosanVal; 
 
           if (fctVal > 0) { totalBudget += fctVal; validBudgetDays++; hasFct = true; }
+          if (yosanVal > 0) { validYosanDays++; } 
           if (lastAct > 0) { totalLastMonth += lastAct; validLastMonthDays++; }
           if (prevYearAct > 0) { totalLastYear += prevYearAct; validLastYearDays++; }
 
@@ -581,9 +585,10 @@ export default function UniversalDashboardPage() {
         const finalLastMonth = isAvgMetric && validLastMonthDays > 0 ? totalLastMonth / validLastMonthDays : totalLastMonth;
         const finalLastYear = isAvgMetric && validLastYearDays > 0 ? totalLastYear / validLastYearDays : totalLastYear;
         const finalYosoku = isAvgMetric && currentMonthIndices.length > 0 ? totalYosoku / currentMonthIndices.length : totalYosoku;
+        const finalYosan = isAvgMetric && validYosanDays > 0 ? totalYosan / validYosanDays : totalYosan; // 🌟 純粋な予算を算出
 
         return { 
-          ...m, _sortVal: finalChakuchi, _monthlyBudget: finalBudget, _monthlyChakuchi: finalChakuchi, _monthlyLastAct: finalLastMonth, _monthlyPrevYearAct: finalLastYear, _lastInputIdx: lastInputIdx, _monthlyYosoku: finalYosoku
+          ...m, _sortVal: finalChakuchi, _monthlyBudget: finalBudget, _monthlyChakuchi: finalChakuchi, _monthlyLastAct: finalLastMonth, _monthlyPrevYearAct: finalLastYear, _lastInputIdx: lastInputIdx, _monthlyYosoku: finalYosoku, _monthlyYosan: finalYosan
         };
       }
 
@@ -1268,7 +1273,7 @@ export default function UniversalDashboardPage() {
 
               if (isMonthly) {
                 dispAct = m._monthlyChakuchi;
-                dispFct = m._monthlyBudget;
+                dispFct = m._monthlyBudget; // 🌟 グラフと黒パネルは「予測」を参照
                 dispLastAct = m._monthlyLastAct;
                 dispPrevYearAct = m._monthlyPrevYearAct;
 
@@ -1406,6 +1411,7 @@ export default function UniversalDashboardPage() {
                       <div className="flex-1">
                         {(displayMode === 'daily' || displayMode === 'monthly') && (
                           <div className="mt-0">
+                            {/* 💡 物量の月次なら「当月実績合計」、それ以外は「月末着地予測」 */}
                             <span className="text-[10px] md:text-[11px] font-bold text-slate-400 block mb-0.5">
                               {isMonthly ? (activeTab === 'volume' ? '当月実績合計' : '月末着地予測') : (!isAvgMetric ? '当週合計実績' : '当週平均実績')}
                             </span>
@@ -1416,20 +1422,49 @@ export default function UniversalDashboardPage() {
                       
                       {/* 💡 工数と労務管理の時は「目標・達成率」パネルを非表示にする */}
                       {(displayMode === 'daily' || displayMode === 'monthly') && (hasForecastData || isMonthly) && !isStacked && !['manhours', 'labor'].includes(activeTab) && (
-                        <div className="flex flex-col gap-1.5 items-end shrink-0">
-                          <div className="flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-xl shadow-sm text-right">
-                            {/* 💡 物量の月次なら「予測達成率」 */}
-                            <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{isMonthly ? (activeTab === 'volume' ? '予測達成率' : '予算達成率') : '月間進捗'}</span>
-                            <span className={`text-sm sm:text-base font-black whitespace-nowrap ${ratioColorClass}`}>{currentRatio.toFixed(1)}%</span>
-                          </div>
-                          {/* 🌟 予測比の追加（売上進捗タブの売上×月次のみ） */}
-                          {isMonthly && activeTab === 'sales' && m.title.includes('売上') && (
-                            <div className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-xl shadow-sm text-right">
-                              <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">予測比</span>
-                              <span className="text-sm sm:text-base font-black whitespace-nowrap text-purple-400">{m._monthlyYosoku > 0 ? ((dispAct / m._monthlyYosoku) * 100).toFixed(1) : '0.0'}%</span>
+                        (() => {
+                          // 🌟 バッジ用の真の予算達成率を算出
+                          let displayYosanRatio = currentRatio;
+                          let yosanColorClass = ratioColorClass;
+                          
+                          if (isMonthly && activeTab === 'sales' && m.title.includes('売上')) {
+                            let pureYosanSum = 0;
+                            let validYosanDays = 0;
+                            currentMonthIndices.forEach(idx => {
+                              let v = n(m.forecast_yosan?.[idx]);
+                              pureYosanSum += v;
+                              if (v > 0) validYosanDays++;
+                            });
+                            let realYosan = isAvgMetric && validYosanDays > 0 ? pureYosanSum / validYosanDays : pureYosanSum;
+                            displayYosanRatio = realYosan > 0 ? (dispAct / realYosan) * 100 : 0;
+                            yosanColorClass = (isCost ? dispAct <= realYosan : dispAct >= realYosan) ? 'text-emerald-400' : 'text-rose-400';
+                          }
+
+                          return (
+                            <div className="flex flex-col gap-1.5 items-end shrink-0">
+                              <div className="flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-xl shadow-sm text-right">
+                                {/* 💡 月次売上は「予算」で固定計算し、他は標準のcurrentRatioを使用 */}
+                                <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{isMonthly ? (activeTab === 'volume' ? '予測達成率' : '予算達成率') : '月間進捗'}</span>
+                                <span className={`text-sm sm:text-base font-black whitespace-nowrap ${
+                                  isMonthly && activeTab === 'sales' && m.title.includes('売上')
+                                    ? (m._monthlyYosan > 0 ? (dispAct >= m._monthlyYosan ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-400')
+                                    : ratioColorClass
+                                }`}>
+                                  {isMonthly && activeTab === 'sales' && m.title.includes('売上') 
+                                    ? (m._monthlyYosan > 0 ? ((dispAct / m._monthlyYosan) * 100).toFixed(1) : '0.0') 
+                                    : currentRatio.toFixed(1)}%
+                                </span>
+                              </div>
+                              {/* 🌟 予測比の追加（売上進捗タブの売上×月次のみ） */}
+                              {isMonthly && activeTab === 'sales' && m.title.includes('売上') && (
+                                <div className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-xl shadow-sm text-right">
+                                  <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">予測比</span>
+                                  <span className="text-sm sm:text-base font-black whitespace-nowrap text-purple-400">{m._monthlyYosoku > 0 ? ((dispAct / m._monthlyYosoku) * 100).toFixed(1) : '0.0'}%</span>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
+                          );
+                        })()
                       )}
                     </div>
 

@@ -509,6 +509,8 @@ export default function UniversalDashboardPage() {
 
         let pureActSum = 0; let pureFctSum = 0;
         let totalYosoku = 0; // 🌟 予測合計用
+        let totalYosan = 0;  // 🌟 予算合計用
+        let validYosanDays = 0;
 
         currentMonthIndices.forEach(idx => {
           let actVal = 0; let fctVal = 0; let lastAct = 0; let prevYearAct = 0; let yosokuVal = 0; let yosanVal = 0;
@@ -533,8 +535,10 @@ export default function UniversalDashboardPage() {
           pureActSum += actVal;
           pureFctSum += fctVal;
           totalYosoku += yosokuVal;
+          totalYosan += yosanVal;
 
           if (fctVal > 0) { totalBudget += fctVal; validBudgetDays++; hasFct = true; }
+          if (yosanVal > 0) { validYosanDays++; }
           if (lastAct > 0) { totalLastMonth += lastAct; validLastMonthDays++; }
           if (prevYearAct > 0) { totalLastYear += prevYearAct; validLastYearDays++; }
 
@@ -581,9 +585,10 @@ export default function UniversalDashboardPage() {
         const finalLastMonth = isAvgMetric && validLastMonthDays > 0 ? totalLastMonth / validLastMonthDays : totalLastMonth;
         const finalLastYear = isAvgMetric && validLastYearDays > 0 ? totalLastYear / validLastYearDays : totalLastYear;
         const finalYosoku = isAvgMetric && currentMonthIndices.length > 0 ? totalYosoku / currentMonthIndices.length : totalYosoku;
+        const finalYosan = isAvgMetric && validYosanDays > 0 ? totalYosan / validYosanDays : totalYosan; // 🌟 純粋な予算を算出
 
         return { 
-          ...m, _sortVal: finalChakuchi, _monthlyBudget: finalBudget, _monthlyChakuchi: finalChakuchi, _monthlyLastAct: finalLastMonth, _monthlyPrevYearAct: finalLastYear, _lastInputIdx: lastInputIdx, _monthlyYosoku: finalYosoku
+          ...m, _sortVal: finalChakuchi, _monthlyBudget: finalBudget, _monthlyChakuchi: finalChakuchi, _monthlyLastAct: finalLastMonth, _monthlyPrevYearAct: finalLastYear, _lastInputIdx: lastInputIdx, _monthlyYosoku: finalYosoku, _monthlyYosan: finalYosan
         };
       }
 
@@ -1265,7 +1270,8 @@ export default function UniversalDashboardPage() {
 
               if (isMonthly) {
                 dispAct = m._monthlyChakuchi;
-                dispFct = m._monthlyBudget;
+                // 🌟 メインの目標（dispFct）を「純粋な予算（_monthlyYosan）」に固定（売上の場合）
+                dispFct = (activeTab === 'sales' && m.title.includes('売上') && m._monthlyYosan) ? m._monthlyYosan : m._monthlyBudget;
                 dispLastAct = m._monthlyLastAct;
                 dispPrevYearAct = m._monthlyPrevYearAct;
 
@@ -1513,7 +1519,7 @@ export default function UniversalDashboardPage() {
                             <div className="space-y-2 mt-3 pt-3 border-t border-slate-700/50">
                               <div className="flex justify-between items-baseline">
                                 <span className="text-[10px] md:text-xs font-bold text-slate-400 whitespace-nowrap">
-                                  {isMonthly ? (activeTab === 'volume' ? `今月${m.forecastType}合計` : `今月${m.forecastType}設定`) : (!isAvgMetric ? `当週${m.forecastType}` : `当週平均${m.forecastType}`)}
+                                  {isMonthly ? (activeTab === 'volume' ? `今月予測合計` : `今月予算設定`) : (!isAvgMetric ? `当週${m.forecastType}` : `当週平均${m.forecastType}`)}
                                 </span>
                                 <span className="text-sm md:text-base font-bold text-slate-300">{formatVal(dispFct, m.title)}</span>
                               </div>
