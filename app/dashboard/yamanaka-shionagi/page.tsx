@@ -55,7 +55,7 @@ export default function UniversalDashboardPage() {
   // 🏢 【拠点マスター設定】
   // =========================================================
   const LOCATION_ID = 'yamanaka-shionagi'; 
-  const LOCATION_NAME = 'ヤマナカ'; 
+  const LOCATION_NAME = 'ヤマナカ　しおなぎ生鮮センター'; 
   
   const GAS_URL = `/api/gas?location=${LOCATION_ID}`;
   const [isMounted, setIsMounted] = useState(false);
@@ -118,7 +118,7 @@ export default function UniversalDashboardPage() {
     if (!title) return Math.round(val).toLocaleString();
     if (title.includes("%") || title.includes("率")) return `${val.toFixed(1)}%`;
     if (title.includes("生産性") || /時給|最低賃金|人数|在籍者|違反者/.test(title)) return Number(val.toFixed(1)).toLocaleString();
-    if (/売上|原価|費|利益|金額|単価|通過/.test(title)) return `¥${Math.round(val).toLocaleString()}`;
+    if (/売上|原価|費|利益|金額|単価/.test(title)) return `¥${Math.round(val).toLocaleString()}`;
     return Math.round(val).toLocaleString();
   };
 
@@ -432,16 +432,11 @@ export default function UniversalDashboardPage() {
     });
 
     let result = Array.from(combinedMap.values()).map(m => {
-        // 🌟 売上進捗タブ ✕ 週次モード のときは強制的に「予測」データを適用する
-        if (activeTab === 'sales' && displayMode === 'weekly') {
+        // 🌟 売上進捗タブの「売上」は週次・月次モードのとき「予測」を目標ラインとしてセットする
+        if (activeTab === 'sales' && m.title.includes('売上') && (displayMode === 'weekly' || displayMode === 'monthly')) {
             if (m.forecast_yosoku && m.forecast_yosoku.some((v: number) => n(v) > 0)) {
                 m.forecast = m.forecast_yosoku;
                 m.forecastType = '予測';
-            }
-        } else if (activeTab === 'sales' && displayMode === 'monthly') {
-            if (m.forecast_yosan && m.forecast_yosan.some((v: number) => n(v) > 0)) {
-                m.forecast = m.forecast_yosan;
-                m.forecastType = '予算';
             }
         }
         return m;
@@ -513,25 +508,31 @@ export default function UniversalDashboardPage() {
         let hasFct = false;
 
         let pureActSum = 0; let pureFctSum = 0;
+        let totalYosoku = 0; // 🌟 予測合計用
 
         currentMonthIndices.forEach(idx => {
-          let actVal = 0; let fctVal = 0; let lastAct = 0; let prevYearAct = 0;
+          let actVal = 0; let fctVal = 0; let lastAct = 0; let prevYearAct = 0; let yosokuVal = 0; let yosanVal = 0;
           
           if (isStacked) {
             const getStacked = (arrKey: string) => n(m.data['通常']?.[arrKey]?.[idx]) + n(m.data['残業']?.[arrKey]?.[idx]) + n(m.data['深夜']?.[arrKey]?.[idx]);
             actVal = getStacked('actual_thisMonth');
             fctVal = m.forecast && n(m.forecast[idx]) > 0 ? n(m.forecast[idx]) : getStacked('forecast');
+            yosokuVal = m.forecast_yosoku && n(m.forecast_yosoku[idx]) > 0 ? n(m.forecast_yosoku[idx]) : getStacked('forecast_yosoku');
+            yosanVal = m.forecast_yosan && n(m.forecast_yosan[idx]) > 0 ? n(m.forecast_yosan[idx]) : getStacked('forecast_yosan');
             lastAct = m.actual_lastMonth && n(m.actual_lastMonth[idx]) > 0 ? n(m.actual_lastMonth[idx]) : getStacked('actual_lastMonth');
             prevYearAct = m.actual_lastYear && n(m.actual_lastYear[idx]) > 0 ? n(m.actual_lastYear[idx]) : getStacked('actual_lastYear');
           } else {
             actVal = n(m.actual_thisMonth?.[idx]); 
             fctVal = n(m.forecast?.[idx]);
+            yosokuVal = n(m.forecast_yosoku?.[idx]);
+            yosanVal = n(m.forecast_yosan?.[idx]);
             lastAct = n(m.actual_lastMonth?.[idx]); 
             prevYearAct = n(m.actual_lastYear?.[idx]);
           }
 
           pureActSum += actVal;
           pureFctSum += fctVal;
+          totalYosoku += yosokuVal;
 
           if (fctVal > 0) { totalBudget += fctVal; validBudgetDays++; hasFct = true; }
           if (lastAct > 0) { totalLastMonth += lastAct; validLastMonthDays++; }
@@ -541,7 +542,11 @@ export default function UniversalDashboardPage() {
             totalChakuchi += actVal;
             if (actVal > 0) validChakuchiDays++;
           } else {
-            if (!m.title.match(/外注費|募集|事故/)) {
+            // 🌟 売上の場合は残りを「予測(yosoku)」で計算
+            if (activeTab === 'sales' && m.title.includes('売上')) {
+              totalChakuchi += yosokuVal;
+              if (yosokuVal > 0) validChakuchiDays++;
+            } else if (!m.title.match(/外注費|募集|事故/)) {
               totalChakuchi += fctVal; 
               if (fctVal > 0) validChakuchiDays++; 
             }
@@ -556,7 +561,7 @@ export default function UniversalDashboardPage() {
             const finalLastYear = isAvgMetric && validLastYearDays > 0 ? totalLastYear / validLastYearDays : totalLastYear;
             
             return { 
-                ...m, _sortVal: finalAct, _monthlyBudget: finalFct, _monthlyChakuchi: finalAct, _monthlyLastAct: finalLastMonth, _monthlyPrevYearAct: finalLastYear, _lastInputIdx: lastInputIdx 
+              ...m, _sortVal: finalAct, _monthlyBudget: finalFct, _monthlyChakuchi: finalAct, _monthlyLastAct: finalLastMonth, _monthlyPrevYearAct: finalLastYear, _lastInputIdx: lastInputIdx 
             };
         }
 
@@ -575,9 +580,10 @@ export default function UniversalDashboardPage() {
         const finalChakuchi = isAvgMetric && validChakuchiDays > 0 ? totalChakuchi / validChakuchiDays : totalChakuchi;
         const finalLastMonth = isAvgMetric && validLastMonthDays > 0 ? totalLastMonth / validLastMonthDays : totalLastMonth;
         const finalLastYear = isAvgMetric && validLastYearDays > 0 ? totalLastYear / validLastYearDays : totalLastYear;
+        const finalYosoku = isAvgMetric && currentMonthIndices.length > 0 ? totalYosoku / currentMonthIndices.length : totalYosoku;
 
         return { 
-          ...m, _sortVal: finalChakuchi, _monthlyBudget: finalBudget, _monthlyChakuchi: finalChakuchi, _monthlyLastAct: finalLastMonth, _monthlyPrevYearAct: finalLastYear, _lastInputIdx: lastInputIdx 
+          ...m, _sortVal: finalChakuchi, _monthlyBudget: finalBudget, _monthlyChakuchi: finalChakuchi, _monthlyLastAct: finalLastMonth, _monthlyPrevYearAct: finalLastYear, _lastInputIdx: lastInputIdx, _monthlyYosoku: finalYosoku
         };
       }
 
@@ -612,38 +618,31 @@ export default function UniversalDashboardPage() {
   }, [sortedMetrics, displayMode, selectedWeek, dataMonth, currentMonthIndices, baseLabelsFiltered, activeTab, weeklyGroups, showHiddenMetrics]);
 
   // =========================================================
-  // 起動用：日次月別の一括処理関数 (生産性・物量) ★完全汎用・複数合算(+)対応版
+  // 起動用：日次月別の一括処理関数 (生産性・物量)
   // =========================================================
   const computedVaultProductivity = useMemo(() => {
     if (!data) return { items: [], summary: { totalVolume: 0, totalHours: 0, totalProd: 0, lastMonthRatio: { vol: 0, hrs: 0, prod: 0 } } };
     
     const targetMonthStr = `/${prodSelectedMonth.padStart(2, '0')}/`;
+    
     let prevM = parseInt(prodSelectedMonth, 10) - 1;
     if (prevM <= 0) prevM += 12;
     const prevMonthStr = `/${String(prevM).padStart(2, '0')}/`;
 
     const processNames = data.masterSettings?.TARGET_CATEGORIES || [];
     const mappingMap = data.masterSettings?.NAME_MAPPING || {};
-    const volumeMap = data.masterSettings?.VOLUME_MAPPING || {};
     
     const mappedProcessNames = processNames.map((proc: string) => mappingMap[proc] || proc);
 
-    // 🌟 '+' で複数指定された物量名も分解してユニークリスト化（二重計上防止）
-    const uniqueVolumeTargets = Array.from(new Set(
-        processNames.length > 0 
-        ? processNames.flatMap((proc: string) => {
-            const vStr = volumeMap[proc] || mappingMap[proc] || proc;
-            return vStr.split('+').map((s: string) => s.trim());
-          }) 
-        : []
-    ));
-
     const getMonthSummary = (monthStr: string) => {
-        let vol = 0; let hrs = 0;
+        let vol = 0;
+        let hrs = 0;
+
         if (data.volumeAccumulatedData) {
             data.volumeAccumulatedData.forEach((item: any) => {
                 const itemName = item.title.replace('蓄積実績_', '');
-                if (processNames.length === 0 || uniqueVolumeTargets.includes(itemName)) {
+                const isMatch = processNames.includes(itemName) || mappedProcessNames.includes(itemName);
+                if (processNames.length === 0 || isMatch) {
                     item.labels.forEach((date: string, idx: number) => {
                         if (date.includes(monthStr)) vol += n(item.values[idx]);
                     });
@@ -684,8 +683,11 @@ export default function UniversalDashboardPage() {
         item.labels.forEach((date: string, idx: number) => {
           if (date.includes(targetMonthStr)) {
             const existing = hTotalRows.find(h => h.date === date);
-            if (existing) existing.value += n(item.values[idx]);
-            else hTotalRows.push({ date: date, value: n(item.values[idx]) });
+            if (existing) {
+              existing.value += n(item.values[idx]);
+            } else {
+              hTotalRows.push({ date: date, value: n(item.values[idx]) });
+            }
           }
         });
       });
@@ -703,50 +705,52 @@ export default function UniversalDashboardPage() {
       });
     }
     
-    const allDates = Array.from(new Set([...vRows.map((r: any) => r.date), ...hTotalRows.map((r: any) => r.date), ...pRows.map((r: any) => r.date)])).sort();
+    const allDates = Array.from(new Set([
+      ...vRows.map((r: any) => r.date),
+      ...hTotalRows.map((r: any) => r.date),
+      ...pRows.map((r: any) => r.date)
+    ])).sort();
     
-    let centerTotalVolume = 0; let centerTotalHours = 0;
+    let centerTotalVolume = 0;
+    let centerTotalHours = 0;
+    
     const fallbackProcessNames = processNames.length > 0 ? processNames : Array.from(new Set([...vRows.map((r: any) => r.item), ...pRows.map((r: any) => r.item)]));
 
     const items = fallbackProcessNames.map((proc: string) => {
-      let procTotalVolume = 0; let prodSum = 0; let prodCount = 0;
+      let procTotalVolume = 0;
+      let prodSum = 0;
+      let prodCount = 0;
       
       const prodName = mappingMap[proc] || proc;
-      const volNameStr = volumeMap[proc] || mappingMap[proc] || proc;
-      
-      // 🌟 '+' で分割して複数のターゲット配列にする
-      const volTargets = volNameStr.split('+').map((s: string) => s.trim());
       
       const dailyList = allDates.map(dt => {
-        // 🌟 複数指定された物量をすべて合算する
-        const vol = vRows
-            .filter((r: any) => r.date === dt && (volTargets.includes(r.item) || r.item === proc))
-            .reduce((sum: number, r: any) => sum + r.value, 0);
+        const vMob = vRows.find((r: any) => r.date === dt && (r.item === prodName || r.item === proc));
+        const vol = vMob ? vMob.value : 0;
         
         const pMob = pRows.find((r: any) => r.date === dt && (r.item === prodName || r.item === proc));
         const prod = pMob ? pMob.value : 0;
         
         procTotalVolume += vol;
-        if (prod > 0) { prodSum += prod; prodCount++; }
+        if (prod > 0) {
+            prodSum += prod;
+            prodCount++;
+        }
         
         return { date: dt.split('/').slice(1).join('/'), volume: vol, hours: 0, prod: prod };
       });
       
       const procTotalProd = prodCount > 0 ? prodSum / prodCount : 0;
+      centerTotalVolume += procTotalVolume;
 
       return { process: proc, dailyList, totalVolume: procTotalVolume, totalHours: 0, totalProd: procTotalProd };
     });
     
-    centerTotalVolume = allDates.reduce((sum, dt) => {
-        const dayVol = vRows.filter((r: any) => r.date === dt && (uniqueVolumeTargets.length > 0 ? uniqueVolumeTargets.includes(r.item) : true))
-                            .reduce((dSum: number, r: any) => dSum + r.value, 0);
-        return sum + dayVol;
-    }, 0);
     centerTotalHours = hTotalRows.reduce((sum, r) => sum + r.value, 0);
     
+    const activeMappedNames = mappedProcessNames.length > 0 ? mappedProcessNames : fallbackProcessNames;
+
     const centerDailyList = allDates.map(dt => {
-      const dayVol = vRows.filter((r: any) => r.date === dt && (uniqueVolumeTargets.length > 0 ? uniqueVolumeTargets.includes(r.item) : fallbackProcessNames.includes(r.item)))
-                          .reduce((sum: number, r: any) => sum + r.value, 0);
+      const dayVol = vRows.filter((r: any) => r.date === dt && (activeMappedNames.includes(r.item) || fallbackProcessNames.includes(r.item))).reduce((sum: number, r: any) => sum + r.value, 0);
       const dayHrsRow = hTotalRows.find((r: any) => r.date === dt);
       const dayHrs = dayHrsRow ? dayHrsRow.value : 0;
       const dayProd = dayHrs > 0 ? dayVol / dayHrs : 0;
@@ -769,11 +773,14 @@ export default function UniversalDashboardPage() {
         totalVolume: centerTotalVolume, 
         totalHours: centerTotalHours, 
         totalProd: centerTotalProd,
-        lastMonthRatio: { vol: calcRatio(centerTotalVolume, prevSummary.vol), hrs: calcRatio(centerTotalHours, prevSummary.hrs), prod: calcRatio(centerTotalProd, prevSummary.prod) }
+        lastMonthRatio: {
+            vol: calcRatio(centerTotalVolume, prevSummary.vol),
+            hrs: calcRatio(centerTotalHours, prevSummary.hrs),
+            prod: calcRatio(centerTotalProd, prevSummary.prod)
+        }
       } 
     };
   }, [data, prodSelectedMonth]);
-
   // =========================================================
   // 🚨 事故管理ダッシュボード用の計算ロジック
   // =========================================================
@@ -1243,7 +1250,7 @@ export default function UniversalDashboardPage() {
               let dispPrevYearAct = 0;
               
               let currentRatio = 0; 
-              let isPaceGood = true; // 🌟 追加：緑・赤のペース判定用
+              let isPaceGood = true;
 
               let diffLastMonth = 0; 
               let diffLastYear = 0;
@@ -1327,14 +1334,10 @@ export default function UniversalDashboardPage() {
                 dispPrevYearAct = targetIndices.reduce((sum, idx) => sum + (isStacked ? (n(m.data['通常']?.actual_lastYear[idx])+n(m.data['残業']?.actual_lastYear[idx])+n(m.data['深夜']?.actual_lastYear[idx])) : n(m.actual_lastYear[idx])), 0);
                 if (isAvgMetric) { dispLastAct /= targetIndices.length || 1; dispPrevYearAct /= targetIndices.length || 1; }
 
-                // 日次の進捗％：月間トータル枠に対してどこまで来ているか（平均の場合は目標平均に対して今の平均がどうなのか）
                 currentRatio = totalMonthlyFct > 0 ? (dispAct / totalMonthlyFct) * 100 : 0;
-                
-                // 日次のペース色判定：最終入力日時点までの「本来の予算（paceFct）」vs「実績（dispAct）」
                 isPaceGood = isCost ? dispAct <= paceFct : dispAct >= paceFct;
               }
 
-              // 🌟 緑・赤の色分け（パーセンテージとは切り離した判定）
               const ratioColorClass = isPaceGood ? 'text-emerald-400' : 'text-rose-400';
 
               diffLastMonth = dispLastAct !== null ? dispAct - dispLastAct : 0; 
@@ -1403,7 +1406,6 @@ export default function UniversalDashboardPage() {
                       <div className="flex-1">
                         {(displayMode === 'daily' || displayMode === 'monthly') && (
                           <div className="mt-0">
-                            {/* 💡 物量の月次なら「当月実績合計」、それ以外は「月末着地予測」 */}
                             <span className="text-[10px] md:text-[11px] font-bold text-slate-400 block mb-0.5">
                               {isMonthly ? (activeTab === 'volume' ? '当月実績合計' : '月末着地予測') : (!isAvgMetric ? '当週合計実績' : '当週平均実績')}
                             </span>
@@ -1414,10 +1416,19 @@ export default function UniversalDashboardPage() {
                       
                       {/* 💡 工数と労務管理の時は「目標・達成率」パネルを非表示にする */}
                       {(displayMode === 'daily' || displayMode === 'monthly') && (hasForecastData || isMonthly) && !isStacked && !['manhours', 'labor'].includes(activeTab) && (
-                        <div className="flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-xl shadow-sm text-right shrink-0">
-                          {/* 💡 物量の月次なら「予測達成率」 */}
-                          <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{isMonthly ? (activeTab === 'volume' ? '予測達成率' : '予算達成率') : '月間進捗'}</span>
-                          <span className={`text-sm sm:text-base font-black whitespace-nowrap ${ratioColorClass}`}>{currentRatio.toFixed(1)}%</span>
+                        <div className="flex flex-col gap-1.5 items-end shrink-0">
+                          <div className="flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-xl shadow-sm text-right">
+                            {/* 💡 物量の月次なら「予測達成率」 */}
+                            <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{isMonthly ? (activeTab === 'volume' ? '予測達成率' : '予算達成率') : '月間進捗'}</span>
+                            <span className={`text-sm sm:text-base font-black whitespace-nowrap ${ratioColorClass}`}>{currentRatio.toFixed(1)}%</span>
+                          </div>
+                          {/* 🌟 予測比の追加（売上進捗タブの売上×月次のみ） */}
+                          {isMonthly && activeTab === 'sales' && m.title.includes('売上') && (
+                            <div className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-xl shadow-sm text-right">
+                              <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">予測比</span>
+                              <span className="text-sm sm:text-base font-black whitespace-nowrap text-purple-400">{m._monthlyYosoku > 0 ? ((dispAct / m._monthlyYosoku) * 100).toFixed(1) : '0.0'}%</span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1489,9 +1500,10 @@ export default function UniversalDashboardPage() {
                     {displayMode !== 'daily' && (
                       <div className="w-full xl:w-[240px] bg-slate-900 text-white p-5 rounded-2xl flex flex-col justify-between shrink-0 shadow-inner min-w-0">
                         <div>
-                          <p className="text-[9px] font-black tracking-widest text-blue-400 uppercase mb-3">{isMonthly ? '月次フォアキャスト確定' : (!isAvgMetric ? '当週合計確認':'当週平均確認')}</p>
+                          <p className="text-[9px] font-black tracking-widest text-blue-400 uppercase mb-3">
+                            {isMonthly ? '月次フォアキャスト確定' : (!isAvgMetric ? '当週合計確認':'当週平均確認')}
+                          </p>
                           <div className="mb-3">
-                            {/* 💡 物量の月次なら「当月実績合計」、それ以外は「月末着地予測」 */}
                             <span className="text-[10px] md:text-[11px] font-bold text-slate-400 block mb-0.5">
                               {isMonthly ? (activeTab === 'volume' ? '当月実績合計' : '月末着地予測') : (!isAvgMetric ? '当週合計実績' : '当週平均実績')}
                             </span>
@@ -1503,7 +1515,7 @@ export default function UniversalDashboardPage() {
                             <div className="space-y-2 mt-3 pt-3 border-t border-slate-700/50">
                               <div className="flex justify-between items-baseline">
                                 <span className="text-[10px] md:text-xs font-bold text-slate-400 whitespace-nowrap">
-                                  {isMonthly ? (activeTab === 'volume' ? `今月${m.forecastType}合計` : '今月目標設定') : (!isAvgMetric ? `当週${m.forecastType}` : `当週平均${m.forecastType}`)}
+                                  {isMonthly ? (activeTab === 'volume' ? `今月${m.forecastType}合計` : `今月${m.forecastType}設定`) : (!isAvgMetric ? `当週${m.forecastType}` : `当週平均${m.forecastType}`)}
                                 </span>
                                 <span className="text-sm md:text-base font-bold text-slate-300">{formatVal(dispFct, m.title)}</span>
                               </div>
