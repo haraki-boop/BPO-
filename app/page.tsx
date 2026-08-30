@@ -170,8 +170,9 @@ export default function MapPortalPage() {
         const L = window.L;
         const leafMap = L.map('leaflet-map-container', { zoomControl: true, attributionControl: true }).setView([35.2, 137.5], 6);
 
-        layersRef.current.light = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?api_key=eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfZGY2c25pdjAiLCJqdGkiOiIxMzJkODAwYyJ9.LCenEvsAie3w9mvNm19ITpdF-ZWEsHUfr3n_4KqFQXM');
-        layersRef.current.dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfZGY2c25pdjAiLCJqdGkiOiIxMzJkODAwYyJ9.LCenEvsAie3w9mvNm19ITpdF-ZWEsHUfr3n_4KqFQXM');
+        // 🛑 ここを `api_key=` から `key=` に修正しました！
+        layersRef.current.light = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfZGY2c25pdjAiLCJqdGkiOiIxMzJkODAwYyJ9.LCenEvsAie3w9mvNm19ITpdF-ZWEsHUfr3n_4KqFQXM');
+        layersRef.current.dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfZGY2c25pdjAiLCJqdGkiOiIxMzJkODAwYyJ9.LCenEvsAie3w9mvNm19ITpdF-ZWEsHUfr3n_4KqFQXM');
         layersRef.current.emergencyGroup = L.featureGroup();
 
         layersRef.current.light.addTo(leafMap);
