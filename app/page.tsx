@@ -170,9 +170,19 @@ export default function MapPortalPage() {
         const L = window.L;
         const leafMap = L.map('leaflet-map-container', { zoomControl: true, attributionControl: true }).setView([35.2, 137.5], 6);
 
-        // 🛑 ここを `api_key=` から `key=` に修正しました！
-        layersRef.current.light = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfZGY2c25pdjAiLCJqdGkiOiIxMzJkODAwYyJ9.LCenEvsAie3w9mvNm19ITpdF-ZWEsHUfr3n_4KqFQXM');
-        layersRef.current.dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfZGY2c25pdjAiLCJqdGkiOiIxMzJkODAwYyJ9.LCenEvsAie3w9mvNm19ITpdF-ZWEsHUfr3n_4KqFQXM');
+        // 🛑 CARTOの新仕様（rastertilesエンドポイント）に対応した修正
+        const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY || 'eyJhbGciOiJIUzI1NiJ9.eyJhIjoiYWNfZGY2c25pdjAiLCJqdGkiOiIxMzJkODAwYyJ9.LCenEvsAie3w9mvNm19ITpdF-ZWEsHUfr3n_4KqFQXM';
+
+        layersRef.current.light = L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?api_key=${CARTO_KEY}`, {
+          subdomains: 'abcd',
+          maxZoom: 20
+        });
+
+        layersRef.current.dark = L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_KEY}`, {
+          subdomains: 'abcd',
+          maxZoom: 20
+        });
+
         layersRef.current.emergencyGroup = L.featureGroup();
 
         layersRef.current.light.addTo(leafMap);
